@@ -1,0 +1,119 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0-windows7.0": {
+      "HumanizeInput.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/HumanizeInput.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/HumanizeInput.Core.dll": {}
+        }
+      },
+      "HumanizeInput.Infra/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "HumanizeInput.Core": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/HumanizeInput.Infra.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/HumanizeInput.Infra.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "HumanizeInput.Core/1.0.0": {
+      "type": "project",
+      "path": "../HumanizeInput.Core/HumanizeInput.Core.csproj",
+      "msbuildProject": "../HumanizeInput.Core/HumanizeInput.Core.csproj"
+    },
+    "HumanizeInput.Infra/1.0.0": {
+      "type": "project",
+      "path": "../HumanizeInput.Infra/HumanizeInput.Infra.csproj",
+      "msbuildProject": "../HumanizeInput.Infra/HumanizeInput.Infra.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0-windows7.0": [
+      "HumanizeInput.Core >= 1.0.0",
+      "HumanizeInput.Infra >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Eric\\.nuget\\packages\\": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.App\\HumanizeInput.App.csproj",
+      "projectName": "HumanizeInput.App",
+      "projectPath": "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.App\\HumanizeInput.App.csproj",
+      "packagesPath": "C:\\Users\\Eric\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.App\\obj\\",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "C:\\Users\\Eric\\AppData\\Roaming\\NuGet\\NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0-windows"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "projectReferences": {
+            "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.Core\\HumanizeInput.Core.csproj": {
+              "projectPath": "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.Core\\HumanizeInput.Core.csproj"
+            },
+            "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.Infra\\HumanizeInput.Infra.csproj": {
+              "projectPath": "C:\\Users\\Eric\\Desktop\\humanize_input\\src\\HumanizeInput.Infra\\HumanizeInput.Infra.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      }
+    },
+    "frameworks": {
+      "net8.0-windows7.0": {
+        "targetAlias": "net8.0-windows",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

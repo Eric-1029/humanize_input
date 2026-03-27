@@ -1,0 +1,15 @@
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\bin\Debug\net8.0-windows\HumanizeInput.Infra.deps.json
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\bin\Debug\net8.0-windows\HumanizeInput.Infra.dll
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\bin\Debug\net8.0-windows\HumanizeInput.Infra.pdb
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\bin\Debug\net8.0-windows\HumanizeInput.Core.dll
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\bin\Debug\net8.0-windows\HumanizeInput.Core.pdb
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.csproj.AssemblyReference.cache
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.AssemblyInfoInputs.cache
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.AssemblyInfo.cs
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.csproj.CoreCompileInputs.cache
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\Humanize.EE8F7EDD.Up2Date
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.dll
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\refint\HumanizeInput.Infra.dll
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\HumanizeInput.Infra.pdb
+C:\Users\Eric\Desktop\humanize_input\src\HumanizeInput.Infra\obj\Debug\net8.0-windows\ref\HumanizeInput.Infra.dll
