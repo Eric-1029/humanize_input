@@ -4,44 +4,59 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="{Binding UiWindowTitle}" Height="760" Width="980" MinHeight="520" MinWidth="680">
-    <Viewbox Stretch="Uniform" StretchDirection="Both" Margin="10">
-    <Grid Margin="18" Width="944" Height="724">
+        Title="{Binding UiWindowTitle}" Height="730" Width="960" MinHeight="500" MinWidth="660">
+    <Viewbox Stretch="Uniform" StretchDirection="Both" Margin="6">
+    <Grid Margin="10" Width="944" Height="724">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Background="#F3F7FA" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="1" Background="#EDF2F6" CornerRadius="8" Padding="8,5">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding CurrentLanguageName}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Button Content="{Binding LanguageToggleButtonText}" Width="62" Height="28" Command="{Binding ToggleLanguageCommand}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1" Background="#F3F7FA" CornerRadius="8" Padding="12" Margin="0,0,0,8">
             <StackPanel>
-                <TextBlock Text="{Binding InputSectionTitle}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="{Binding InputSectionTitle}" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,6"/>
                 <TextBox Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}" 
                          AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
-                         MinHeight="220"
+                         MinHeight="196"
                          TextWrapping="Wrap"
-                         FontSize="15"
-                         Padding="10"/>
+                         FontSize="14"
+                         Padding="9"/>
             </StackPanel>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,0,0,12">
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#F6F3EF" CornerRadius="10" Padding="14" Margin="0,0,8,0">
+            <Border Grid.Column="0" Background="#F6F3EF" CornerRadius="8" Padding="12" Margin="0,0,6,0">
                 <StackPanel>
-                    <TextBlock Text="{Binding TypingRhythmSectionTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding TypingRhythmSectionTitle}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
                     <TextBlock Text="{Binding BaseDelayLabelText}" />
                     <Slider Minimum="20" Maximum="500" Value="{Binding BaseDelayMs}" TickFrequency="10" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding BaseDelayDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding BaseDelayDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding JitterLabelText}" />
                     <Slider Minimum="0" Maximum="80" Value="{Binding JitterPercent}" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding JitterDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding JitterDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding LeadInLabelText}" />
                     <Slider Minimum="0" Maximum="6000" Value="{Binding LeadInDelayMs}" TickFrequency="100" IsSnapToTickEnabled="True"/>
@@ -49,29 +64,29 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Column="1" Background="#EEF7F0" CornerRadius="10" Padding="14" Margin="8,0,0,0">
+            <Border Grid.Column="1" Background="#EEF7F0" CornerRadius="8" Padding="12" Margin="6,0,0,0">
                 <StackPanel>
-                    <TextBlock Text="{Binding ErrorSimulationSectionTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding ErrorSimulationSectionTitle}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding TypoRateLabelText}" />
                     <Slider Minimum="0" Maximum="30" Value="{Binding TypoRatePercent}" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding TypoRateDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding TypoRateDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding OmissionRateLabelText}" />
                     <Slider Minimum="0" Maximum="30" Value="{Binding OmissionRatePercent}" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding OmissionRateDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding OmissionRateDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding TransposeRateLabelText}" />
                     <Slider Minimum="0" Maximum="20" Value="{Binding TransposeRatePercent}" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding TransposeRateDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding TransposeRateDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding RepairRateLabelText}" />
                     <Slider Minimum="0" Maximum="100" Value="{Binding RepairRatePercent}" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding RepairRateDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding RepairRateDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding ErrorDetectDelayLabelText}" />
                     <Slider Minimum="80" Maximum="3000" Value="{Binding ErrorDetectDelayMs}" TickFrequency="20" IsSnapToTickEnabled="True"/>
-                    <TextBlock Text="{Binding ErrorDetectDelayDisplayText}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding ErrorDetectDelayDisplayText}" Margin="0,0,0,6"/>
 
                     <TextBlock Text="{Binding BackspaceDelayLabelText}" />
                     <Slider Minimum="10" Maximum="500" Value="{Binding BackspaceDelayMs}" TickFrequency="5" IsSnapToTickEnabled="True"/>
@@ -80,40 +95,31 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Background="#F2F2F2" CornerRadius="10" Padding="12">
+        <Border Grid.Row="3" Background="#F2F2F2" CornerRadius="8" Padding="10">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="220"/>
-                    <ColumnDefinition Width="220"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="188"/>
+                    <ColumnDefinition Width="188"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="{Binding StartHotkeyLabelText}" FontWeight="SemiBold"/>
                     <TextBox Text="{Binding StartHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                <StackPanel Grid.Column="1" Margin="0,0,8,0">
                     <TextBlock Text="{Binding PauseHotkeyLabelText}" FontWeight="SemiBold"/>
                     <TextBox Text="{Binding PauseHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}"/>
                 </StackPanel>
 
-                <Button Grid.Column="2" Content="{Binding ApplyHotkeysButtonText}" Width="110" Height="34" Margin="0,20,10,0" Command="{Binding ApplyHotkeysCommand}"/>
+                <Button Grid.Column="2" Content="{Binding ApplyHotkeysButtonText}" Width="100" Height="32" Margin="0,18,8,0" Command="{Binding ApplyHotkeysCommand}"/>
 
-                <StackPanel Grid.Column="3" Margin="0,0,10,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding LanguageLabelText}" FontWeight="SemiBold"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                        <TextBlock Text="{Binding CurrentLanguageName}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <Button Content="{Binding LanguageToggleButtonText}" Width="70" Height="30" Command="{Binding ToggleLanguageCommand}"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                <StackPanel Grid.Column="3" VerticalAlignment="Center">
                     <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding ProgressText}" FontSize="13" />
-                    <TextBlock Text="{Binding TrayHintText}" FontSize="12" Foreground="#4A4A4A"/>
+                    <TextBlock Text="{Binding ProgressText}" FontSize="12" />
+                    <TextBlock Text="{Binding TrayHintText}" FontSize="11" Foreground="#4A4A4A"/>
                 </StackPanel>
             </Grid>
         </Border>
