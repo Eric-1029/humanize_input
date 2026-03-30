@@ -16,8 +16,18 @@ namespace HumanizeInput.App;
 public partial class MainWindow : Window
 {
     private const int WmHotkey = 0x0312;
+    private const int WmNchittest = 0x0084;
     private const int StartHotkeyId = 9001;
     private const int PauseHotkeyId = 9002;
+    private const int HtLeft = 10;
+    private const int HtRight = 11;
+    private const int HtTop = 12;
+    private const int HtTopLeft = 13;
+    private const int HtTopRight = 14;
+    private const int HtBottom = 15;
+    private const int HtBottomLeft = 16;
+    private const int HtBottomRight = 17;
+    private const double ResizeBorderThickness = 8d;
 
     private readonly MainViewModel _viewModel;
     private HwndSource? _hwndSource;
@@ -42,6 +52,7 @@ public partial class MainWindow : Window
 
         Loaded += OnLoaded;
         SourceInitialized += OnSourceInitialized;
+        Deactivated += OnDeactivated;
         Closing += OnClosing;
     }
 
@@ -57,6 +68,36 @@ public partial class MainWindow : Window
         nint handle = new WindowInteropHelper(this).Handle;
         _hwndSource = HwndSource.FromHwnd(handle);
         _hwndSource?.AddHook(WndProc);
+    }
+
+    private void OnDeactivated(object? sender, EventArgs e)
+    {
+        if (_isExitRequested || !IsVisible || !ShowInTaskbar)
+        {
+            return;
+        }
+
+        nint foregroundWindow = GetForegroundWindow();
+        if (foregroundWindow != nint.Zero)
+        {
+            _ = GetWindowThreadProcessId(foregroundWindow, out uint processId);
+            if (processId == (uint)Environment.ProcessId)
+            {
+                return;
+            }
+        }
+
+        HideToTray();
+    }
+
+    private void OnWindowFrameMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || !ReferenceEquals(sender, e.OriginalSource))
+        {
+            return;
+        }
+
+        DragMove();
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -186,6 +227,18 @@ public partial class MainWindow : Window
 
     private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
+        if (msg == WmNchittest)
+        {
+            nint resizeHit = HitTestResizeBorder(lParam);
+            if (resizeHit != nint.Zero)
+            {
+                handled = true;
+                return resizeHit;
+            }
+
+            return nint.Zero;
+        }
+
         if (msg != WmHotkey)
         {
             return nint.Zero;
@@ -202,6 +255,72 @@ public partial class MainWindow : Window
         {
             _viewModel.TriggerPauseResumeHotkey();
             handled = true;
+        }
+
+        return nint.Zero;
+    }
+
+    private nint HitTestResizeBorder(nint lParam)
+    {
+        if (WindowState == WindowState.Maximized ||
+            (ResizeMode is not ResizeMode.CanResize and not ResizeMode.CanResizeWithGrip))
+        {
+            return nint.Zero;
+        }
+
+        int packed = unchecked((int)lParam.ToInt64());
+        int screenX = (short)(packed & 0xFFFF);
+        int screenY = (short)((packed >> 16) & 0xFFFF);
+
+        System.Windows.Point point = PointFromScreen(new System.Windows.Point(screenX, screenY));
+        if (point.X < 0 || point.Y < 0 || point.X > ActualWidth || point.Y > ActualHeight)
+        {
+            return nint.Zero;
+        }
+
+        bool isLeft = point.X <= ResizeBorderThickness;
+        bool isRight = point.X >= ActualWidth - ResizeBorderThickness;
+        bool isTop = point.Y <= ResizeBorderThickness;
+        bool isBottom = point.Y >= ActualHeight - ResizeBorderThickness;
+
+        if (isTop && isLeft)
+        {
+            return (nint)HtTopLeft;
+        }
+
+        if (isTop && isRight)
+        {
+            return (nint)HtTopRight;
+        }
+
+        if (isBottom && isLeft)
+        {
+            return (nint)HtBottomLeft;
+        }
+
+        if (isBottom && isRight)
+        {
+            return (nint)HtBottomRight;
+        }
+
+        if (isLeft)
+        {
+            return (nint)HtLeft;
+        }
+
+        if (isRight)
+        {
+            return (nint)HtRight;
+        }
+
+        if (isTop)
+        {
+            return (nint)HtTop;
+        }
+
+        if (isBottom)
+        {
+            return (nint)HtBottom;
         }
 
         return nint.Zero;
@@ -272,4 +391,7 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 }
