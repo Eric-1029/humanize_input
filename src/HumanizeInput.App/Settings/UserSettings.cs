@@ -2,6 +2,7 @@ namespace HumanizeInput.App.Settings;
 
 public sealed class UserSettings
 {
+    public string Language { get; set; } = "zh-CN";
     public int BaseDelayMs { get; set; } = 90;
     public int JitterPercent { get; set; } = 20;
     public int TypoRatePercent { get; set; } = 8;

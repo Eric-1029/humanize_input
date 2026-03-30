@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private readonly MainViewModel _viewModel;
     private HwndSource? _hwndSource;
     private Forms.NotifyIcon? _trayIcon;
+    private Forms.ToolStripMenuItem? _openMenuItem;
+    private Forms.ToolStripMenuItem? _exitMenuItem;
     private bool _isExitRequested;
 
     public MainWindow()
@@ -35,6 +37,7 @@ public partial class MainWindow : Window
 
         _viewModel = new MainViewModel(sessionService, driver, settingsStore);
         _viewModel.HotkeyUpdateRequested += RegisterHotkeys;
+        _viewModel.UiLanguageChanged += UpdateTrayMenuItemsText;
         DataContext = _viewModel;
 
         Loaded += OnLoaded;
@@ -89,8 +92,12 @@ public partial class MainWindow : Window
         }
 
         Forms.ContextMenuStrip menu = new();
-        menu.Items.Add("打开主窗口", null, (_, _) => ShowFromTray());
-        menu.Items.Add("退出", null, (_, _) => ExitApplication());
+        _openMenuItem = new Forms.ToolStripMenuItem(_viewModel.TrayOpenMenuText);
+        _openMenuItem.Click += (_, _) => ShowFromTray();
+        _exitMenuItem = new Forms.ToolStripMenuItem(_viewModel.TrayExitMenuText);
+        _exitMenuItem.Click += (_, _) => ExitApplication();
+        menu.Items.Add(_openMenuItem);
+        menu.Items.Add(_exitMenuItem);
 
         _trayIcon = new Forms.NotifyIcon
         {
@@ -136,14 +143,23 @@ public partial class MainWindow : Window
 
         bool startOk = TryRegisterOne(handle, StartHotkeyId, startHotkeyText);
         bool pauseOk = TryRegisterOne(handle, PauseHotkeyId, pauseHotkeyText);
+        _viewModel.ReportHotkeyRegistrationResult(startOk && pauseOk, startHotkeyText, pauseHotkeyText);
+    }
 
-        if (startOk && pauseOk)
+    private void UpdateTrayMenuItemsText()
+    {
+        Dispatcher.Invoke(() =>
         {
-            _viewModel.StatusText = $"状态: 全局热键已生效（开始: {startHotkeyText}，暂停: {pauseHotkeyText}）";
-            return;
-        }
+            if (_openMenuItem is not null)
+            {
+                _openMenuItem.Text = _viewModel.TrayOpenMenuText;
+            }
 
-        _viewModel.StatusText = "状态: 热键注册失败，请检查格式或避免与系统热键冲突";
+            if (_exitMenuItem is not null)
+            {
+                _exitMenuItem.Text = _viewModel.TrayExitMenuText;
+            }
+        });
     }
 
     private static bool TryRegisterOne(nint handle, int hotkeyId, string hotkeyText)

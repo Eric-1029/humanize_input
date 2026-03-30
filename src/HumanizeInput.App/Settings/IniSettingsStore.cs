@@ -56,6 +56,9 @@ public sealed class IniSettingsStore
     public void Save(UserSettings settings)
     {
         StringBuilder sb = new();
+        sb.AppendLine("[ui]");
+        sb.AppendLine($"language={settings.Language}");
+        sb.AppendLine();
         sb.AppendLine("[typing]");
         sb.AppendLine($"base_delay_ms={settings.BaseDelayMs}");
         sb.AppendLine($"jitter_percent={settings.JitterPercent}");
@@ -78,6 +81,9 @@ public sealed class IniSettingsStore
     {
         switch (key)
         {
+            case "language":
+                settings.Language = string.IsNullOrWhiteSpace(value) ? settings.Language : value;
+                break;
             case "base_delay_ms":
                 settings.BaseDelayMs = ParseInt(value, settings.BaseDelayMs);
                 break;
@@ -125,6 +131,7 @@ public sealed class IniSettingsStore
     {
         return new UserSettings
         {
+            Language = source.Language,
             BaseDelayMs = source.BaseDelayMs,
             JitterPercent = source.JitterPercent,
             TypoRatePercent = source.TypoRatePercent,

@@ -18,6 +18,7 @@ English version: [README.md](README.md)
 - 程序启动后自动最小化到托盘，双击托盘图标恢复窗口
 - 焦点窗口变更时自动等待，焦点恢复后继续输入
 - 窗口按比例缩放（非最大化时也能完整看到参数区）
+- 文/A 双语界面切换（中英），设置项与介绍文案均可翻译
 - 设置自动持久化到 INI 文件
 - 启动自动加载、修改后自动保存
 - 首次启动自动生成默认 `settings.ini`
@@ -55,6 +56,7 @@ dotnet run --project .\src\HumanizeInput.App\HumanizeInput.App.csproj
 - 首次启动会自动写入默认配置。
 - 用户调整设置项后会自动保存。
 - 下次启动会自动从 INI 读取并恢复配置。
+- 语言会通过 `language=zh-CN|en-US` 持久化。
 
 ## 参数建议（更像人类）
 
