@@ -18,6 +18,9 @@ Windows-native human-like typing simulator built with C# and WPF.
 - Auto-minimize to tray on startup, double-click tray icon to restore
 - Auto-wait on focus loss and continue when focus returns
 - Proportional UI scaling (sliders remain visible in windowed mode)
+- Automatic settings persistence to INI
+- Auto-load settings on startup, auto-save after option changes
+- First launch creates default `settings.ini`
 
 ## Project Structure
 
@@ -45,6 +48,13 @@ dotnet run --project .\src\HumanizeInput.App\HumanizeInput.App.csproj
 4. The app auto-minimizes to tray. Double-click tray icon to restore.
 5. Focus the target editor input area, then press Start hotkey.
 6. Press Pause hotkey anytime to pause/resume.
+
+## Settings File (INI)
+
+- Default location: same folder as the executable (`settings.ini`).
+- On first launch, default settings are written automatically.
+- After users change options, settings are auto-saved.
+- On next launch, settings are auto-loaded from the INI file.
 
 ## Recommended Human-like Settings
 

@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using System.Drawing;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Input;
 using Forms = System.Windows.Forms;
+using HumanizeInput.App.Settings;
 using HumanizeInput.App.ViewModels;
 using HumanizeInput.Core;
 using HumanizeInput.Infra.Input;
@@ -28,8 +30,10 @@ public partial class MainWindow : Window
 
         ITypingDriver driver = new WindowsSendInputDriver();
         TypingSessionService sessionService = new(driver);
+        string settingsPath = Path.Combine(AppContext.BaseDirectory, "settings.ini");
+        IniSettingsStore settingsStore = new(settingsPath);
 
-        _viewModel = new MainViewModel(sessionService, driver);
+        _viewModel = new MainViewModel(sessionService, driver, settingsStore);
         _viewModel.HotkeyUpdateRequested += RegisterHotkeys;
         DataContext = _viewModel;
 
@@ -73,6 +77,8 @@ public partial class MainWindow : Window
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
         }
+
+        _viewModel.FlushSettings();
     }
 
     private void EnsureTrayIcon()

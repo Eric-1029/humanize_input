@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using HumanizeInput.App.Commands;
+using HumanizeInput.App.Settings;
 using HumanizeInput.Core;
 using HumanizeInput.Core.Models;
 
@@ -15,6 +17,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly RelayCommand _startCommand;
     private readonly RelayCommand _pauseResumeCommand;
     private readonly RelayCommand _applyHotkeysCommand;
+    private readonly IniSettingsStore _settingsStore;
+    private readonly DispatcherTimer _saveDebounceTimer;
+    private bool _isApplyingLoadedSettings;
 
     private string _inputText = string.Empty;
     private int _baseDelayMs = 90;
@@ -31,10 +36,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string _startHotkeyText = "Ctrl+Alt+S";
     private string _pauseHotkeyText = "Ctrl+Alt+P";
 
-    public MainViewModel(TypingSessionService session, ITypingDriver driver)
+    public MainViewModel(TypingSessionService session, ITypingDriver driver, IniSettingsStore settingsStore)
     {
         _session = session;
         _driver = driver;
+        _settingsStore = settingsStore;
 
         _startCommand = new RelayCommand(StartSession, () => !_session.IsBusy);
         _pauseResumeCommand = new RelayCommand(TogglePauseResume, () => _session.IsBusy);
@@ -43,6 +49,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _session.StateChanged += OnStateChanged;
         _session.ProgressChanged += OnProgressChanged;
         _session.LogProduced += OnLogProduced;
+
+        _saveDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(600)
+        };
+        _saveDebounceTimer.Tick += (_, _) => SaveSettingsNow();
+
+        LoadSettings();
 
     }
 
@@ -57,61 +71,121 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string InputText
     {
         get => _inputText;
-        set => SetField(ref _inputText, value);
+        set
+        {
+            if (SetField(ref _inputText, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int BaseDelayMs
     {
         get => _baseDelayMs;
-        set => SetField(ref _baseDelayMs, value);
+        set
+        {
+            if (SetField(ref _baseDelayMs, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int JitterPercent
     {
         get => _jitterPercent;
-        set => SetField(ref _jitterPercent, value);
+        set
+        {
+            if (SetField(ref _jitterPercent, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int TypoRatePercent
     {
         get => _typoRatePercent;
-        set => SetField(ref _typoRatePercent, value);
+        set
+        {
+            if (SetField(ref _typoRatePercent, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int OmissionRatePercent
     {
         get => _omissionRatePercent;
-        set => SetField(ref _omissionRatePercent, value);
+        set
+        {
+            if (SetField(ref _omissionRatePercent, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int TransposeRatePercent
     {
         get => _transposeRatePercent;
-        set => SetField(ref _transposeRatePercent, value);
+        set
+        {
+            if (SetField(ref _transposeRatePercent, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int RepairRatePercent
     {
         get => _repairRatePercent;
-        set => SetField(ref _repairRatePercent, value);
+        set
+        {
+            if (SetField(ref _repairRatePercent, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int ErrorDetectDelayMs
     {
         get => _errorDetectDelayMs;
-        set => SetField(ref _errorDetectDelayMs, value);
+        set
+        {
+            if (SetField(ref _errorDetectDelayMs, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int BackspaceDelayMs
     {
         get => _backspaceDelayMs;
-        set => SetField(ref _backspaceDelayMs, value);
+        set
+        {
+            if (SetField(ref _backspaceDelayMs, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public int LeadInDelayMs
     {
         get => _leadInDelayMs;
-        set => SetField(ref _leadInDelayMs, value);
+        set
+        {
+            if (SetField(ref _leadInDelayMs, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public string StatusText
@@ -129,13 +203,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string StartHotkeyText
     {
         get => _startHotkeyText;
-        set => SetField(ref _startHotkeyText, value);
+        set
+        {
+            if (SetField(ref _startHotkeyText, value))
+            {
+                QueueSettingsSave();
+            }
+        }
     }
 
     public string PauseHotkeyText
     {
         get => _pauseHotkeyText;
-        set => SetField(ref _pauseHotkeyText, value);
+        set
+        {
+            if (SetField(ref _pauseHotkeyText, value))
+            {
+                QueueSettingsSave();
+            }
+        }
+    }
+
+    public void FlushSettings()
+    {
+        SaveSettingsNow();
     }
 
     public void TriggerStartHotkey(nint targetWindow)
@@ -212,6 +303,65 @@ public sealed class MainViewModel : INotifyPropertyChanged
         };
     }
 
+    private void LoadSettings()
+    {
+        _isApplyingLoadedSettings = true;
+        try
+        {
+            UserSettings loaded = _settingsStore.LoadOrCreateDefault(BuildCurrentUserSettings());
+            BaseDelayMs = loaded.BaseDelayMs;
+            JitterPercent = loaded.JitterPercent;
+            TypoRatePercent = loaded.TypoRatePercent;
+            OmissionRatePercent = loaded.OmissionRatePercent;
+            TransposeRatePercent = loaded.TransposeRatePercent;
+            RepairRatePercent = loaded.RepairRatePercent;
+            ErrorDetectDelayMs = loaded.ErrorDetectDelayMs;
+            BackspaceDelayMs = loaded.BackspaceDelayMs;
+            LeadInDelayMs = loaded.LeadInDelayMs;
+            StartHotkeyText = loaded.StartHotkeyText;
+            PauseHotkeyText = loaded.PauseHotkeyText;
+        }
+        finally
+        {
+            _isApplyingLoadedSettings = false;
+        }
+    }
+
+    private UserSettings BuildCurrentUserSettings()
+    {
+        return new UserSettings
+        {
+            BaseDelayMs = BaseDelayMs,
+            JitterPercent = JitterPercent,
+            TypoRatePercent = TypoRatePercent,
+            OmissionRatePercent = OmissionRatePercent,
+            TransposeRatePercent = TransposeRatePercent,
+            RepairRatePercent = RepairRatePercent,
+            ErrorDetectDelayMs = ErrorDetectDelayMs,
+            BackspaceDelayMs = BackspaceDelayMs,
+            LeadInDelayMs = LeadInDelayMs,
+            StartHotkeyText = StartHotkeyText,
+            PauseHotkeyText = PauseHotkeyText
+        };
+    }
+
+    private void QueueSettingsSave()
+    {
+        if (_isApplyingLoadedSettings)
+        {
+            return;
+        }
+
+        _saveDebounceTimer.Stop();
+        _saveDebounceTimer.Start();
+    }
+
+    private void SaveSettingsNow()
+    {
+        _saveDebounceTimer.Stop();
+        _settingsStore.Save(BuildCurrentUserSettings());
+    }
+
     private void OnStateChanged(SessionState state)
     {
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -243,14 +393,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _pauseResumeCommand.RaiseCanExecuteChanged();
     }
 
-    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {
-            return;
+            return false;
         }
 
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        return true;
     }
 }
