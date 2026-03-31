@@ -106,6 +106,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string ApplyHotkeysButtonText => Translate("应用热键", "Apply Hotkeys");
     public string HotkeyExampleTooltipText => Translate("示例: Ctrl+Alt+S", "Example: Ctrl+Alt+S");
     public string TrayHintText => Translate("程序启动后会自动最小化到托盘。双击托盘图标可恢复窗口。", "The app auto-minimizes to tray on startup. Double-click the tray icon to restore.");
+    public string SettingsButtonText => Translate("设置", "Settings");
+    public string SettingsMenuTitleText => Translate("设置", "Settings");
     public string LanguageLabelText => Translate("语言", "Language");
     public string CurrentLanguageName => IsChinese ? "中文" : "English";
     public string LanguageToggleButtonText => "文 / A";
@@ -578,6 +580,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ApplyHotkeysButtonText));
         OnPropertyChanged(nameof(HotkeyExampleTooltipText));
         OnPropertyChanged(nameof(TrayHintText));
+        OnPropertyChanged(nameof(SettingsButtonText));
+        OnPropertyChanged(nameof(SettingsMenuTitleText));
         OnPropertyChanged(nameof(LanguageLabelText));
         OnPropertyChanged(nameof(CurrentLanguageName));
         OnPropertyChanged(nameof(LanguageToggleButtonText));

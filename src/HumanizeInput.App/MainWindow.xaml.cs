@@ -152,9 +152,16 @@ public partial class MainWindow : Window
 
     private void HideToTray()
     {
+        SettingsPopup.IsOpen = false;
         WindowState = WindowState.Minimized;
         ShowInTaskbar = false;
         Hide();
+    }
+
+    private void OnSettingsMenuButtonClick(object sender, RoutedEventArgs e)
+    {
+        SettingsPopup.IsOpen = !SettingsPopup.IsOpen;
+        e.Handled = true;
     }
 
     private void ShowFromTray()

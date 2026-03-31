@@ -24,7 +24,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="340"/>
-                    <RowDefinition Height="132"/>
+                    <RowDefinition Height="108"/>
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0" Background="#F3F7FA" CornerRadius="10" Padding="12" Margin="0,0,0,8">
@@ -104,40 +104,55 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Background="#EDF2F6" CornerRadius="10" Padding="12,10" Margin="0,0,6,0">
+                    <Grid Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center">
+                        <Border Background="#EDF2F6" BorderBrush="#C9D7E3" BorderThickness="1" CornerRadius="10" Padding="10,7">
+                            <Button x:Name="SettingsMenuButton"
+                                    Content="{Binding SettingsButtonText}"
+                                    MinWidth="104"
+                                    Height="28"
+                                    FontWeight="SemiBold"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="OnSettingsMenuButtonClick"/>
+                        </Border>
+
+                        <Popup x:Name="SettingsPopup"
+                               PlacementTarget="{Binding ElementName=SettingsMenuButton}"
+                               Placement="Top"
+                               VerticalOffset="-8"
+                               StaysOpen="False"
+                               AllowsTransparency="True"
+                               PopupAnimation="Fade">
+                            <Border Background="#FFFFFF" BorderBrush="#CCD7E2" BorderThickness="1" CornerRadius="10" Padding="12">
+                                <StackPanel Width="280">
+                                    <TextBlock Text="{Binding SettingsMenuTitleText}" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="{Binding StartHotkeyLabelText}" FontWeight="SemiBold"/>
+                                    <TextBox Text="{Binding StartHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}" Margin="0,2,0,6"/>
+
+                                    <TextBlock Text="{Binding PauseHotkeyLabelText}" FontWeight="SemiBold"/>
+                                    <TextBox Text="{Binding PauseHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}" Margin="0,2,0,8"/>
+
+                                    <Button Content="{Binding ApplyHotkeysButtonText}" Width="108" Height="30" HorizontalAlignment="Left" Command="{Binding ApplyHotkeysCommand}" Margin="0,0,0,8"/>
+
+                                    <Separator Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="{Binding LanguageLabelText}" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding CurrentLanguageName}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <Button Content="{Binding LanguageToggleButtonText}" Width="62" Height="28" Command="{Binding ToggleLanguageCommand}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <Border Grid.Column="1" Background="#F2F2F2" CornerRadius="10" Padding="8,7" Margin="6,0,0,0">
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{Binding LanguageLabelText}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding CurrentLanguageName}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <Button Content="{Binding LanguageToggleButtonText}" Width="62" Height="28" Command="{Binding ToggleLanguageCommand}"/>
-                            </StackPanel>
+                            <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding ProgressText}" FontSize="11"/>
+                            <TextBlock Text="{Binding TrayHintText}" FontSize="10" Foreground="#4A4A4A"/>
                         </StackPanel>
-                    </Border>
-
-                    <Border Grid.Column="1" Background="#F2F2F2" CornerRadius="10" Padding="10" Margin="6,0,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="230"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                <TextBlock Text="{Binding StartHotkeyLabelText}" FontWeight="SemiBold"/>
-                                <TextBox Text="{Binding StartHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}"/>
-
-                                <TextBlock Text="{Binding PauseHotkeyLabelText}" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                                <TextBox Text="{Binding PauseHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}"/>
-                            </StackPanel>
-
-                            <Button Grid.Column="1" Content="{Binding ApplyHotkeysButtonText}" Width="100" Height="32" Margin="0,26,8,0" Command="{Binding ApplyHotkeysCommand}"/>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding ProgressText}" FontSize="12"/>
-                                <TextBlock Text="{Binding TrayHintText}" FontSize="11" Foreground="#4A4A4A"/>
-                            </StackPanel>
-                        </Grid>
                     </Border>
                 </Grid>
             </Grid>
