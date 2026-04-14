@@ -35,6 +35,10 @@ Windows-native human-like typing simulator built with C# and WPF.
 
 Install .NET 8 SDK and Windows Desktop Runtime first.
 
+## Direct Run
+
+If you already have a release build, you can run `dist/publish/HumanizeInput.App.exe` directly instead of compiling from source. On startup, the app auto-minimizes to the tray; if the main window does not stay visible and you only see a tray presence or small window, that is expected and means the app started correctly.
+
 ## Build and Run
 
 ```powershell
