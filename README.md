@@ -37,7 +37,7 @@ Install .NET 8 SDK and Windows Desktop Runtime first.
 
 ## Direct Run
 
-If you download a release ZIP package, such as `dist/humanize_input-v1.1.1-win-x64.zip`, unzip it and double-click `HumanizeInput.App.exe` to start. You do not need to compile from source. On startup, the app auto-minimizes to the tray; if the main window does not stay visible and you only see a tray presence or small window, that is expected and means the app started correctly.
+If you download a release ZIP package, such as `dist/humanize_input-v1.1.2-win-x64.zip`, unzip it and double-click `HumanizeInput.App.exe` to start. You do not need to compile from source. On startup, the app auto-minimizes to the tray; if the main window does not stay visible and you only see a tray presence or small window, that is expected and means the app started correctly.
 
 ## Build and Run
 
