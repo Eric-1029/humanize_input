@@ -1,0 +1,192 @@
+<Window x:Class="HumanizeInput.App.Analysis.TypingFrequencyDetectorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="{Binding WindowTitle}"
+        Height="760"
+        Width="1040"
+        MinHeight="620"
+        MinWidth="860"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        Background="#E9EEF5">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="#FFFFFF"
+                BorderBrush="#D5DEE8"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="{Binding WindowTitle}" FontSize="22" FontWeight="SemiBold" Foreground="#13202D" />
+                    <TextBlock Text="{Binding StatusText}" Margin="0,6,0,0" FontSize="13" Foreground="#506173" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="{Binding PromptLanguageToggleText}"
+                            Margin="0,0,10,0"
+                            MinWidth="168"
+                            Height="34"
+                            Padding="14,0"
+                            Background="#EAF1F8"
+                            BorderBrush="#C8D4E0"
+                            Foreground="#173046"
+                            Command="{Binding TogglePromptLanguageCommand}" />
+                    <Button Content="{Binding ResetButtonText}"
+                            MinWidth="98"
+                            Height="34"
+                            Padding="14,0"
+                            Background="#F4F6F9"
+                            BorderBrush="#D5DEE8"
+                            Foreground="#32465A"
+                            Command="{Binding ResetCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="0,14,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.35*" />
+                <ColumnDefinition Width="0.95*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <Border Background="#FFFFFF"
+                        BorderBrush="#D5DEE8"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="18">
+                    <StackPanel>
+                        <TextBlock Text="{Binding PromptSectionTitle}" FontSize="15" FontWeight="SemiBold" Foreground="#173046" />
+                        <TextBlock Text="{Binding PromptLanguageName}" Margin="0,4,0,12" FontSize="12" Foreground="#6B7C8F" />
+                        <TextBlock Text="{Binding PromptText}" TextWrapping="Wrap" FontSize="17" LineHeight="30" Foreground="#1D2835" />
+                    </StackPanel>
+                </Border>
+
+                <Border Margin="0,14,0,0"
+                        Background="#FFFFFF"
+                        BorderBrush="#D5DEE8"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="18">
+                    <StackPanel>
+                        <TextBlock Text="{Binding InputSectionTitle}" FontSize="15" FontWeight="SemiBold" Foreground="#173046" />
+                        <TextBlock Text="{Binding StatusText}" Margin="0,4,0,12" FontSize="12" Foreground="#6B7C8F" TextWrapping="Wrap" />
+                        <TextBox x:Name="TypingAreaBox"
+                                 Text="{Binding TypedText, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 TextWrapping="Wrap"
+                                 FontSize="16"
+                                 Padding="12"
+                                 MinHeight="260"
+                                 BorderBrush="#C9D5E2"
+                                 Background="#FBFCFE"
+                                 Foreground="#13202D" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Grid Grid.Column="1" Margin="14,0,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Background="#FDFDFD"
+                        BorderBrush="#D5DEE8"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="18">
+                    <StackPanel>
+                        <TextBlock Text="{Binding MetricsSectionTitle}" FontSize="15" FontWeight="SemiBold" Foreground="#173046" />
+                        <TextBlock Text="{Binding LiveMetricsText}" Margin="0,10,0,0" FontFamily="Consolas" FontSize="13" LineHeight="20" Foreground="#203040" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Margin="0,14,0,0"
+                        Background="#FFFFFF"
+                        BorderBrush="#D5DEE8"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="18">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="{Binding ResultSectionTitle}" FontSize="15" FontWeight="SemiBold" Foreground="#173046" />
+
+                        <ScrollViewer Grid.Row="1"
+                                      Margin="0,10,0,0"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock Text="{Binding ResultSummaryText}"
+                                       FontFamily="Consolas"
+                                       FontSize="13"
+                                       LineHeight="20"
+                                       Foreground="#203040"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Background="#FFFFFF"
+                BorderBrush="#D5DEE8"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="14,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{Binding CloseButtonText}"
+                        MinWidth="96"
+                        Height="34"
+                        Padding="14,0"
+                        Margin="0,0,10,0"
+                        Background="#F4F6F9"
+                        BorderBrush="#D5DEE8"
+                        Foreground="#32465A"
+                        Click="OnCloseClick" />
+                <Button Content="{Binding GenerateButtonText}"
+                        MinWidth="140"
+                        Height="34"
+                        Padding="14,0"
+                        Margin="0,0,10,0"
+                        Background="#EAF1F8"
+                        BorderBrush="#C8D4E0"
+                        Foreground="#173046"
+                        Command="{Binding GenerateFitCommand}" />
+                <Button Content="{Binding ApplyButtonText}"
+                        MinWidth="150"
+                        Height="34"
+                        Padding="14,0"
+                        Background="#2F7D5C"
+                        BorderBrush="#256048"
+                        Foreground="#FFFFFF"
+                        IsEnabled="{Binding CanApply}"
+                        Click="OnApplyClick" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

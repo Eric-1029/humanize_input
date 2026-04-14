@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using HumanizeInput.App.Analysis;
 using HumanizeInput.App.Commands;
 using HumanizeInput.App.Settings;
 using HumanizeInput.Core;
@@ -109,6 +110,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string SettingsButtonText => Translate("设置", "Settings");
     public string SettingsMenuTitleText => Translate("设置", "Settings");
     public string LanguageLabelText => Translate("语言", "Language");
+    public string TypingDetectorButtonText => Translate("打开输入检测器", "Open Typing Detector");
     public string CurrentLanguageName => IsChinese ? "中文" : "English";
     public string LanguageToggleButtonText => "文 / A";
     public string TrayOpenMenuText => Translate("打开主窗口", "Open Window");
@@ -379,6 +381,32 @@ public sealed class MainViewModel : INotifyPropertyChanged
         CurrentLanguage = IsChinese ? LanguageEnUs : LanguageZhCn;
     }
 
+    public void ApplyTypingFitResult(TypingFitResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        _isApplyingLoadedSettings = true;
+        try
+        {
+            BaseDelayMs = result.BaseDelayMs;
+            JitterPercent = result.JitterPercent;
+            TypoRatePercent = result.TypoRatePercent;
+            OmissionRatePercent = result.OmissionRatePercent;
+            TransposeRatePercent = result.TransposeRatePercent;
+            RepairRatePercent = result.RepairRatePercent;
+            ErrorDetectDelayMs = result.ErrorDetectDelayMs;
+            BackspaceDelayMs = result.BackspaceDelayMs;
+            LeadInDelayMs = result.LeadInDelayMs;
+        }
+        finally
+        {
+            _isApplyingLoadedSettings = false;
+        }
+
+        SaveSettingsNow();
+        SetStatusDetail(Translate($"已应用拟合结果，准确率 {result.AccuracyPercent:F1}%", $"Applied fitted result with {result.AccuracyPercent:F1}% accuracy."));
+    }
+
     private TypingSettings BuildSettings()
     {
         return new TypingSettings
@@ -583,6 +611,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SettingsButtonText));
         OnPropertyChanged(nameof(SettingsMenuTitleText));
         OnPropertyChanged(nameof(LanguageLabelText));
+        OnPropertyChanged(nameof(TypingDetectorButtonText));
         OnPropertyChanged(nameof(CurrentLanguageName));
         OnPropertyChanged(nameof(LanguageToggleButtonText));
         OnPropertyChanged(nameof(TrayOpenMenuText));

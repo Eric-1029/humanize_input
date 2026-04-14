@@ -33,6 +33,7 @@
                         <TextBox Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto"
+                                 Height="196"
                                  MinHeight="196"
                                  TextWrapping="Wrap"
                                  FontSize="14"
@@ -142,6 +143,13 @@
                                         <TextBlock Text="{Binding CurrentLanguageName}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <Button Content="{Binding LanguageToggleButtonText}" Width="62" Height="28" Command="{Binding ToggleLanguageCommand}"/>
                                     </StackPanel>
+
+                                    <Separator Margin="0,10,0,8"/>
+
+                                    <Button Content="{Binding TypingDetectorButtonText}"
+                                            Width="240"
+                                            Height="30"
+                                            Click="OnOpenTypingDetectorClick"/>
                                 </StackPanel>
                             </Border>
                         </Popup>

@@ -19,6 +19,7 @@ Windows-native human-like typing simulator built with C# and WPF.
 - Auto-wait on focus loss and continue when focus returns
 - Proportional UI scaling (sliders remain visible in windowed mode)
 - Bilingual UI toggle (文 / A) with Chinese/English labels and help text
+- Typing detector window that records a sample and fits simulation parameters
 - Automatic settings persistence to INI
 - Auto-load settings on startup, auto-save after option changes
 - First launch creates default `settings.ini`
@@ -46,9 +47,10 @@ dotnet run --project .\src\HumanizeInput.App\HumanizeInput.App.csproj
 1. Paste target text into the main textbox.
 2. Adjust typing parameters (speed, jitter, typo rate, omission rate, transposition rate, repair rate).
 3. Configure and apply global hotkeys (default: Start `Ctrl+Alt+S`, Pause/Resume `Ctrl+Alt+P`).
-4. The app auto-minimizes to tray. Double-click tray icon to restore.
-5. Focus the target editor input area, then press Start hotkey.
-6. Press Pause hotkey anytime to pause/resume.
+4. Open the settings popup and launch the typing detector if you want to fit parameters from a real sample.
+5. The app auto-minimizes to tray. Double-click tray icon to restore.
+6. Focus the target editor input area, then press Start hotkey.
+7. Press Pause hotkey anytime to pause/resume.
 
 ## Settings File (INI)
 

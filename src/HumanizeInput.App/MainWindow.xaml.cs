@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Input;
 using Forms = System.Windows.Forms;
+using HumanizeInput.App.Analysis;
 using HumanizeInput.App.Settings;
 using HumanizeInput.App.ViewModels;
 using HumanizeInput.Core;
@@ -161,6 +162,24 @@ public partial class MainWindow : Window
     private void OnSettingsMenuButtonClick(object sender, RoutedEventArgs e)
     {
         SettingsPopup.IsOpen = !SettingsPopup.IsOpen;
+        e.Handled = true;
+    }
+
+    private void OnOpenTypingDetectorClick(object sender, RoutedEventArgs e)
+    {
+        SettingsPopup.IsOpen = false;
+
+        TypingFrequencyDetectorWindow detectorWindow = new(_viewModel.CurrentLanguage)
+        {
+            Owner = this
+        };
+
+        bool? dialogResult = detectorWindow.ShowDialog();
+        if (dialogResult == true && detectorWindow.Result is not null)
+        {
+            _viewModel.ApplyTypingFitResult(detectorWindow.Result);
+        }
+
         e.Handled = true;
     }
 
