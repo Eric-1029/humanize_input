@@ -37,7 +37,7 @@ English version: [README.md](README.md)
 
 ## 直接运行 Release
 
-如果你已经有发布版，可以直接运行 `dist/publish/HumanizeInput.App.exe`，不需要先编译。启动后程序会自动最小化到托盘；如果你只看到托盘图标或小窗，这是正常现象，说明程序已经启动。需要时双击托盘图标可恢复主窗口。
+如果你下载的是 release 的 ZIP 包，例如 `dist/humanize_input-v1.1.1-win-x64.zip`，解压后直接双击 `HumanizeInput.App.exe` 即可启动，不需要先编译。启动后程序会自动最小化到托盘；如果你只看到托盘图标或小窗，这是正常现象，说明程序已经启动。需要时双击托盘图标可恢复主窗口。
 
 ## 构建与运行
 
