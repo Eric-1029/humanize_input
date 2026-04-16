@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Threading;
 using HumanizeInput.App.Commands;
 
 namespace HumanizeInput.App.Analysis;
@@ -15,6 +16,8 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
     private readonly RelayCommand _togglePromptLanguageCommand;
     private readonly RelayCommand _resetCommand;
     private readonly RelayCommand _generateFitCommand;
+    private readonly RelayCommand _captureToggleCommand;
+    private readonly DispatcherTimer _captureTimer;
 
     private string _promptLanguageCode;
     private string _promptText;
@@ -23,7 +26,9 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
     private string _liveMetricsText;
     private string _resultSummaryText;
     private TypingFitResult? _latestResult;
+    private bool _isRecording;
     private bool _suppressTextRecording;
+    private int _capturedElapsedMilliseconds;
 
     public TypingFrequencyDetectorViewModel(string uiLanguageCode)
     {
@@ -34,7 +39,14 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
         _togglePromptLanguageCommand = new RelayCommand(TogglePromptLanguage);
         _resetCommand = new RelayCommand(ResetSample);
         _generateFitCommand = new RelayCommand(() => GenerateFit());
-        _statusText = Translate("请输入下方文本，然后点击“生成拟合参数”或直接应用。", "Type the sample below, then click Generate Fit or Apply.");
+        _captureToggleCommand = new RelayCommand(ToggleCapture);
+        _captureTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _captureTimer.Tick += (_, _) => UpdateLiveMetricsText();
+        _analyzer.Reset(_promptText);
+        _statusText = Translate("点击开始后再输入样本，停止后会自动生成拟合结果。", "Click Start to record the sample, then Stop to generate the fit.");
         _liveMetricsText = string.Empty;
         _resultSummaryText = Translate("尚未生成拟合结果。", "No fitted result yet.");
         UpdateLiveMetricsText();
@@ -68,7 +80,7 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
 
     public string ResetButtonText => Translate("重新开始", "Reset");
 
-    public string GenerateButtonText => Translate("生成拟合参数", "Generate Fit");
+    public string CaptureButtonText => _isRecording ? Translate("停止", "Stop") : Translate("开始", "Start");
 
     public string ApplyButtonText => Translate("应用到主设置", "Apply to Main Settings");
 
@@ -98,7 +110,7 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
             {
                 _suppressTextRecording = false;
             }
-            else
+            else if (_isRecording)
             {
                 _analyzer.RecordTextChange(previousText, value, DateTimeOffset.UtcNow);
                 _latestResult = null;
@@ -126,7 +138,9 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
 
     public bool HasResult => _latestResult is not null;
 
-    public bool CanApply => _latestResult is not null;
+    public bool CanApply => !_isRecording && _latestResult is not null;
+
+    public bool IsRecording => _isRecording;
 
     public TypingFitResult? LatestResult => _latestResult;
 
@@ -136,17 +150,35 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
 
     public ICommand GenerateFitCommand => _generateFitCommand;
 
+    public ICommand CaptureToggleCommand => _captureToggleCommand;
+
     public void ResetSample()
     {
         _suppressTextRecording = true;
         TypedText = string.Empty;
+        _suppressTextRecording = false;
         _analyzer.Reset(_promptText);
         _latestResult = null;
+        _capturedElapsedMilliseconds = 0;
+        RaiseCaptureStateChanged();
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(CanApply));
         UpdateResultSummaryText();
         UpdateLiveMetricsText();
-        StatusText = Translate("已重置样本，可以重新输入。", "Sample reset; you can start typing again.");
+        StatusText = _isRecording
+            ? Translate("样本已重置，继续输入。", "Sample reset; keep typing.")
+            : Translate("样本已重置，点击开始后输入。", "Sample reset; click Start to begin.");
+    }
+
+    public void ToggleCapture()
+    {
+        if (_isRecording)
+        {
+            StopCapture();
+            return;
+        }
+
+        StartCapture();
     }
 
     public bool GenerateFit()
@@ -179,14 +211,19 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
         _analyzer.Reset(_promptText);
         _suppressTextRecording = true;
         TypedText = string.Empty;
+        _suppressTextRecording = false;
         _latestResult = null;
+        _capturedElapsedMilliseconds = 0;
+        RaiseCaptureStateChanged();
         OnPropertyChanged(nameof(PromptLanguageName));
         OnPropertyChanged(nameof(PromptLanguageToggleText));
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(CanApply));
         UpdateResultSummaryText();
         UpdateLiveMetricsText();
-        StatusText = Translate("示例文本已切换。", "Sample text switched.");
+        StatusText = _isRecording
+            ? Translate("示例文本已切换，继续输入。", "Sample text switched; keep typing.")
+            : Translate("示例文本已切换，点击开始后输入。", "Sample text switched; click Start to begin.");
     }
 
     private void UpdateLiveMetricsText()
@@ -194,7 +231,8 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
         double averageTypingInterval = _analyzer.AverageInsertIntervalMs;
         double averageBackspaceInterval = _analyzer.AverageBackspaceIntervalMs;
         double averageCorrectionDelay = _analyzer.AverageCorrectionDelayMs;
-        int elapsedSeconds = (int)Math.Floor(_analyzer.ElapsedMilliseconds / 1000.0);
+        int elapsedMilliseconds = _isRecording ? _analyzer.ElapsedMilliseconds : _capturedElapsedMilliseconds;
+        int elapsedSeconds = (int)Math.Floor(elapsedMilliseconds / 1000.0);
 
         if (string.Equals(_uiLanguageCode, LanguageZhCn, StringComparison.OrdinalIgnoreCase))
         {
@@ -232,6 +270,42 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
         ResultSummaryText = _latestResult?.Summary ?? Translate("尚未生成拟合结果。", "No fitted result yet.");
     }
 
+    private void StartCapture()
+    {
+        _analyzer.Reset(_promptText);
+        _latestResult = null;
+        _capturedElapsedMilliseconds = 0;
+        _suppressTextRecording = true;
+        TypedText = string.Empty;
+        _suppressTextRecording = false;
+        _isRecording = true;
+        _captureTimer.Start();
+
+        RaiseCaptureStateChanged();
+        UpdateResultSummaryText();
+        UpdateLiveMetricsText();
+        StatusText = Translate("已开始计时，请输入样本。", "Recording started; type the sample now.");
+    }
+
+    private void StopCapture()
+    {
+        if (!_isRecording)
+        {
+            return;
+        }
+
+        _isRecording = false;
+        _captureTimer.Stop();
+        _capturedElapsedMilliseconds = _analyzer.ElapsedMilliseconds;
+        RaiseCaptureStateChanged();
+
+        bool generated = GenerateFit();
+        StatusText = generated
+            ? Translate("已停止计时，并生成拟合结果。", "Recording stopped and the fit was generated.")
+            : Translate("已停止计时，但样本为空。", "Recording stopped, but the sample is empty.");
+        UpdateLiveMetricsText();
+    }
+
     private string BuildPromptText(string languageCode)
     {
         if (string.Equals(languageCode, LanguageEnUs, StringComparison.OrdinalIgnoreCase))
@@ -260,6 +334,13 @@ public sealed class TypingFrequencyDetectorViewModel : INotifyPropertyChanged
     private void OnPropertyChanged(string propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private void RaiseCaptureStateChanged()
+    {
+        OnPropertyChanged(nameof(CaptureButtonText));
+        OnPropertyChanged(nameof(IsRecording));
+        OnPropertyChanged(nameof(CanApply));
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

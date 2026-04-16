@@ -90,6 +90,7 @@
                                  Text="{Binding TypedText, UpdateSourceTrigger=PropertyChanged}"
                                  AcceptsReturn="True"
                                  AcceptsTab="True"
+                                 IsEnabled="{Binding IsRecording}"
                                  VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Disabled"
                                  TextWrapping="Wrap"
@@ -168,7 +169,7 @@
                         BorderBrush="#D5DEE8"
                         Foreground="#32465A"
                         Click="OnCloseClick" />
-                <Button Content="{Binding GenerateButtonText}"
+                <Button Content="{Binding CaptureButtonText}"
                         MinWidth="140"
                         Height="34"
                         Padding="14,0"
@@ -176,7 +177,8 @@
                         Background="#EAF1F8"
                         BorderBrush="#C8D4E0"
                         Foreground="#173046"
-                        Command="{Binding GenerateFitCommand}" />
+                    Command="{Binding CaptureToggleCommand}"
+                    Click="OnCaptureButtonClick" />
                 <Button Content="{Binding ApplyButtonText}"
                         MinWidth="150"
                         Height="34"

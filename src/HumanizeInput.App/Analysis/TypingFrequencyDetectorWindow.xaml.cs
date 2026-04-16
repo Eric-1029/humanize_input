@@ -26,6 +26,18 @@ public partial class TypingFrequencyDetectorWindow : Window
         Close();
     }
 
+    private void OnCaptureButtonClick(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (ViewModel.IsRecording)
+            {
+                TypingAreaBox.Focus();
+                TypingAreaBox.CaretIndex = TypingAreaBox.Text.Length;
+            }
+        }));
+    }
+
     private void OnApplyClick(object sender, RoutedEventArgs e)
     {
         if (!ViewModel.CanApply && !ViewModel.GenerateFit())

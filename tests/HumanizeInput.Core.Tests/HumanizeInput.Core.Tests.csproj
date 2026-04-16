@@ -15,5 +15,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HumanizeInput.Core\HumanizeInput.Core.csproj" />
+    <ProjectReference Include="..\..\src\HumanizeInput.App\HumanizeInput.App.csproj" />
   </ItemGroup>
 </Project>

@@ -2,6 +2,20 @@ namespace HumanizeInput.App.Analysis;
 
 internal sealed class TypingSampleAnalyzer
 {
+    private enum AlignmentOperation
+    {
+        Match,
+        Transposition,
+        Substitution,
+        Deletion,
+        Insertion
+    }
+
+    private readonly record struct AlignmentCounts(int Insertions, int Deletions, int Substitutions, int Transpositions)
+    {
+        public int Omissions => Deletions;
+    }
+
     private readonly List<double> _insertIntervalsMs = new();
     private readonly List<double> _backspaceIntervalsMs = new();
     private readonly List<double> _correctionDelaysMs = new();
@@ -157,14 +171,16 @@ internal sealed class TypingSampleAnalyzer
             ? Clamp((int)Math.Round((standardDeviation / averageInterval) * 100.0), 0, 80)
             : 20;
 
-        int omissions = CountOmissions(_promptText, _typedText);
-        int transpositions = CountAdjacentTranspositions(_promptText, _typedText);
-        int substitutions = CountSubstitutions(_promptText, _typedText, transpositions);
+        AlignmentCounts alignment = AnalyzeAlignment(_promptText, _typedText);
+        int omissions = alignment.Omissions;
+        int transpositions = alignment.Transpositions;
+        int substitutions = alignment.Substitutions;
+        int insertions = alignment.Insertions;
         int repairRate = _errorBlocks > 0
             ? Clamp((int)Math.Round((_correctedErrorBlocks * 100.0) / _errorBlocks), 0, 100)
             : 85;
 
-        int typoRate = Clamp((int)Math.Round(((substitutions + Math.Max(0, _deletedCharacters - omissions)) * 100.0) / promptLength), 0, 30);
+        int typoRate = Clamp((int)Math.Round(((substitutions + insertions + Math.Max(0, _deletedCharacters - omissions)) * 100.0) / promptLength), 0, 30);
         int omissionRate = Clamp((int)Math.Round((omissions * 100.0) / promptLength), 0, 30);
         int transposeRate = Clamp((int)Math.Round((transpositions * 100.0) / promptLength), 0, 20);
 
@@ -176,7 +192,7 @@ internal sealed class TypingSampleAnalyzer
             ? Clamp((int)Math.Round(_backspaceIntervalsMs.Average()), 10, 500)
             : Clamp((int)Math.Round(baseDelayMs * 0.8), 10, 500);
 
-        double accuracyPercent = ClampDouble(100.0 - ((omissions + substitutions + transpositions) * 100.0 / promptLength), 0, 100);
+        double accuracyPercent = ClampDouble(100.0 - ((omissions + substitutions + insertions + transpositions) * 100.0 / promptLength), 0, 100);
         string summary = BuildSummary(promptLanguageCode, uiLanguageCode, totalElapsedMs, baseDelayMs, jitterPercent, typoRate, omissionRate, transposeRate, repairRate, errorDetectDelayMs, backspaceDelayMs, accuracyPercent);
 
         return new TypingFitResult
@@ -272,39 +288,96 @@ internal sealed class TypingSampleAnalyzer
         return suffixLength;
     }
 
-    private static int CountOmissions(string prompt, string typed)
+    private static AlignmentCounts AnalyzeAlignment(string prompt, string typed)
     {
-        int count = 0;
-        int limit = Math.Min(prompt.Length, typed.Length);
-        for (int i = 0; i < limit; i++)
+        int promptLength = prompt.Length;
+        int typedLength = typed.Length;
+        int[,] costs = new int[promptLength + 1, typedLength + 1];
+        AlignmentOperation[,] operations = new AlignmentOperation[promptLength + 1, typedLength + 1];
+
+        for (int i = 1; i <= promptLength; i++)
         {
-            if (prompt[i] != typed[i])
+            costs[i, 0] = i;
+            operations[i, 0] = AlignmentOperation.Deletion;
+        }
+
+        for (int j = 1; j <= typedLength; j++)
+        {
+            costs[0, j] = j;
+            operations[0, j] = AlignmentOperation.Insertion;
+        }
+
+        for (int i = 1; i <= promptLength; i++)
+        {
+            for (int j = 1; j <= typedLength; j++)
             {
-                count++;
+                int bestCost = costs[i - 1, j] + 1;
+                AlignmentOperation bestOperation = AlignmentOperation.Deletion;
+
+                TryUpdateBest(costs[i, j - 1] + 1, AlignmentOperation.Insertion, ref bestCost, ref bestOperation);
+
+                bool isMatch = prompt[i - 1] == typed[j - 1];
+                TryUpdateBest(costs[i - 1, j - 1] + (isMatch ? 0 : 1), isMatch ? AlignmentOperation.Match : AlignmentOperation.Substitution, ref bestCost, ref bestOperation);
+
+                if (i > 1 && j > 1 && prompt[i - 1] == typed[j - 2] && prompt[i - 2] == typed[j - 1])
+                {
+                    TryUpdateBest(costs[i - 2, j - 2] + 1, AlignmentOperation.Transposition, ref bestCost, ref bestOperation);
+                }
+
+                costs[i, j] = bestCost;
+                operations[i, j] = bestOperation;
             }
         }
 
-        if (prompt.Length > typed.Length)
-        {
-            count += prompt.Length - typed.Length;
-        }
+        int insertions = 0;
+        int deletions = 0;
+        int substitutions = 0;
+        int transpositions = 0;
 
-        return count;
-    }
-
-    private static int CountSubstitutions(string prompt, string typed, int transpositions)
-    {
-        int limit = Math.Min(prompt.Length, typed.Length);
-        int count = 0;
-        for (int i = 0; i < limit; i++)
+        int row = promptLength;
+        int column = typedLength;
+        while (row > 0 || column > 0)
         {
-            if (prompt[i] != typed[i])
+            if (row == 0)
             {
-                count++;
+                insertions += column;
+                break;
+            }
+
+            if (column == 0)
+            {
+                deletions += row;
+                break;
+            }
+
+            switch (operations[row, column])
+            {
+                case AlignmentOperation.Match:
+                    row--;
+                    column--;
+                    break;
+                case AlignmentOperation.Substitution:
+                    substitutions++;
+                    row--;
+                    column--;
+                    break;
+                case AlignmentOperation.Transposition:
+                    transpositions++;
+                    row -= 2;
+                    column -= 2;
+                    break;
+                case AlignmentOperation.Deletion:
+                    deletions++;
+                    row--;
+                    break;
+                case AlignmentOperation.Insertion:
+                    insertions++;
+                    column--;
+                    break;
             }
         }
 
-        return Math.Max(0, count - transpositions * 2);
+        return new AlignmentCounts(insertions, deletions, substitutions, transpositions);
     }
 
     private static int CountAdjacentTranspositions(string prompt, string typed)
@@ -335,6 +408,28 @@ internal sealed class TypingSampleAnalyzer
         }
 
         return count;
+    }
+
+    private static void TryUpdateBest(int candidateCost, AlignmentOperation candidateOperation, ref int bestCost, ref AlignmentOperation bestOperation)
+    {
+        if (candidateCost < bestCost || (candidateCost == bestCost && OperationPriority(candidateOperation) < OperationPriority(bestOperation)))
+        {
+            bestCost = candidateCost;
+            bestOperation = candidateOperation;
+        }
+    }
+
+    private static int OperationPriority(AlignmentOperation operation)
+    {
+        return operation switch
+        {
+            AlignmentOperation.Match => 0,
+            AlignmentOperation.Transposition => 1,
+            AlignmentOperation.Substitution => 2,
+            AlignmentOperation.Deletion => 3,
+            AlignmentOperation.Insertion => 4,
+            _ => 5
+        };
     }
 
     private static string BuildSummary(string promptLanguageCode, string uiLanguageCode, int totalElapsedMs, int baseDelayMs, int jitterPercent, int typoRate, int omissionRate, int transposeRate, int repairRate, int errorDetectDelayMs, int backspaceDelayMs, double accuracyPercent)
