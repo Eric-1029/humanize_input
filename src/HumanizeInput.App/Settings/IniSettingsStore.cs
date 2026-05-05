@@ -82,7 +82,7 @@ public sealed class IniSettingsStore
         switch (key)
         {
             case "language":
-                settings.Language = string.IsNullOrWhiteSpace(value) ? settings.Language : value;
+                settings.Language = string.IsNullOrWhiteSpace(value) ? "en-US" : value;
                 break;
             case "base_delay_ms":
                 settings.BaseDelayMs = ParseInt(value, settings.BaseDelayMs);

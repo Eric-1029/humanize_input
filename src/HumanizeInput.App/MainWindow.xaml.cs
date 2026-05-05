@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -181,6 +182,27 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    private void OnOpenGitHubProfileClick(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(_viewModel.GitHubProfileUrl);
+        e.Handled = true;
+    }
+
+    private void OnOpenGitHubRepositoryClick(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(_viewModel.GitHubRepositoryUrl);
+        e.Handled = true;
+    }
+
+    private static void OpenUrl(string url)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
     }
 
     private void ShowFromTray()

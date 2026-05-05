@@ -27,7 +27,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool _isApplyingLoadedSettings;
 
     private string _inputText = string.Empty;
-    private string _currentLanguage = LanguageZhCn;
+    private string _currentLanguage = LanguageEnUs;
     private int _baseDelayMs = 90;
     private int _jitterPercent = 20;
     private int _typoRatePercent = 8;
@@ -111,6 +111,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string SettingsMenuTitleText => Translate("设置", "Settings");
     public string LanguageLabelText => Translate("语言", "Language");
     public string TypingDetectorButtonText => Translate("打开输入检测器", "Open Typing Detector");
+    public string AboutSectionTitleText => Translate("关于", "About");
+    public string AppNameText => "humanize_input";
+    public string AppDescriptionText => Translate("Windows 原生逐字输入模拟工具", "Windows-native human-like typing simulator");
+    public string AppTechStackText => Translate("C# + WPF / .NET 8", "C# + WPF / .NET 8");
+    public string GitHubProfileLabelText => Translate("GitHub 主页", "GitHub Profile");
+    public string GitHubRepositoryLabelText => Translate("GitHub 仓库", "GitHub Repository");
+    public string OpenGitHubProfileButtonText => Translate("打开主页", "Open Profile");
+    public string OpenRepositoryButtonText => Translate("打开仓库", "Open Repository");
+    public string GitHubProfileValueText => "Eric-1029";
+    public string GitHubRepositoryValueText => "Eric-1029/humanize_input";
+    public string GitHubProfileUrl => "https://github.com/Eric-1029";
+    public string GitHubRepositoryUrl => "https://github.com/Eric-1029/humanize_input";
     public string CurrentLanguageName => IsChinese ? "中文" : "English";
     public string LanguageToggleButtonText => "文 / A";
     public string TrayOpenMenuText => Translate("打开主窗口", "Open Window");
@@ -612,6 +624,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SettingsMenuTitleText));
         OnPropertyChanged(nameof(LanguageLabelText));
         OnPropertyChanged(nameof(TypingDetectorButtonText));
+        OnPropertyChanged(nameof(AboutSectionTitleText));
+        OnPropertyChanged(nameof(AppNameText));
+        OnPropertyChanged(nameof(AppDescriptionText));
+        OnPropertyChanged(nameof(AppTechStackText));
+        OnPropertyChanged(nameof(GitHubProfileLabelText));
+        OnPropertyChanged(nameof(GitHubRepositoryLabelText));
+        OnPropertyChanged(nameof(OpenGitHubProfileButtonText));
+        OnPropertyChanged(nameof(OpenRepositoryButtonText));
+        OnPropertyChanged(nameof(GitHubProfileValueText));
+        OnPropertyChanged(nameof(GitHubRepositoryValueText));
+        OnPropertyChanged(nameof(GitHubProfileUrl));
+        OnPropertyChanged(nameof(GitHubRepositoryUrl));
         OnPropertyChanged(nameof(CurrentLanguageName));
         OnPropertyChanged(nameof(LanguageToggleButtonText));
         OnPropertyChanged(nameof(TrayOpenMenuText));

@@ -125,7 +125,10 @@
                                AllowsTransparency="True"
                                PopupAnimation="Fade">
                             <Border Background="#FFFFFF" BorderBrush="#CCD7E2" BorderThickness="1" CornerRadius="10" Padding="12">
-                                <StackPanel Width="280">
+                                <ScrollViewer MaxHeight="420"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Width="320">
                                     <TextBlock Text="{Binding SettingsMenuTitleText}" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,8"/>
 
                                     <TextBlock Text="{Binding StartHotkeyLabelText}" FontWeight="SemiBold"/>
@@ -150,7 +153,22 @@
                                             Width="240"
                                             Height="30"
                                             Click="OnOpenTypingDetectorClick"/>
-                                </StackPanel>
+                                    <Separator Margin="0,10,0,8"/>
+
+                                    <TextBlock Text="{Binding AboutSectionTitleText}" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{Binding AppNameText}" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="{Binding AppDescriptionText}" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                                    <TextBlock Text="{Binding AppTechStackText}" TextWrapping="Wrap" Margin="0,0,0,8" Foreground="#5B6570"/>
+
+                                    <TextBlock Text="{Binding GitHubProfileLabelText}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding GitHubProfileValueText}" Margin="0,2,0,4"/>
+                                    <Button Content="{Binding OpenGitHubProfileButtonText}" Height="30" Margin="0,0,0,8" Click="OnOpenGitHubProfileClick"/>
+
+                                    <TextBlock Text="{Binding GitHubRepositoryLabelText}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding GitHubRepositoryValueText}" Margin="0,2,0,4"/>
+                                    <Button Content="{Binding OpenRepositoryButtonText}" Height="30" Click="OnOpenGitHubRepositoryClick"/>
+                                    </StackPanel>
+                                </ScrollViewer>
                             </Border>
                         </Popup>
                     </Grid>
