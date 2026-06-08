@@ -14,4 +14,5 @@ public sealed class UserSettings
     public int LeadInDelayMs { get; set; } = 2500;
     public string StartHotkeyText { get; set; } = "Ctrl+Alt+S";
     public string PauseHotkeyText { get; set; } = "Ctrl+Alt+P";
+    public string CancelHotkeyText { get; set; } = "Ctrl+Alt+Q";
 }

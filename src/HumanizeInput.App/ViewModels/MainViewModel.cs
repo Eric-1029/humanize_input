@@ -25,6 +25,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly IniSettingsStore _settingsStore;
     private readonly DispatcherTimer _saveDebounceTimer;
     private bool _isApplyingLoadedSettings;
+    private CancellationTokenSource? _pendingStartCts;
+    private bool _isStartPending;
 
     private string _inputText = string.Empty;
     private string _currentLanguage = LanguageEnUs;
@@ -43,6 +45,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private TypingProgress _lastProgress = new();
     private string _startHotkeyText = "Ctrl+Alt+S";
     private string _pauseHotkeyText = "Ctrl+Alt+P";
+    private string _cancelHotkeyText = "Ctrl+Alt+Q";
 
     public MainViewModel(TypingSessionService session, ITypingDriver driver, IniSettingsStore settingsStore)
     {
@@ -50,7 +53,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _driver = driver;
         _settingsStore = settingsStore;
 
-        _startCommand = new RelayCommand(StartSession, () => !_session.IsBusy);
+        _startCommand = new RelayCommand(StartSession, () => !_session.IsBusy && !_isStartPending);
         _pauseResumeCommand = new RelayCommand(TogglePauseResume, () => _session.IsBusy);
         _applyHotkeysCommand = new RelayCommand(ApplyHotkeys);
         _toggleLanguageCommand = new RelayCommand(ToggleLanguage);
@@ -77,7 +80,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ApplyHotkeysCommand => _applyHotkeysCommand;
     public ICommand ToggleLanguageCommand => _toggleLanguageCommand;
 
-    public event Action<string, string>? HotkeyUpdateRequested;
+    public event Action<string, string, string>? HotkeyUpdateRequested;
     public event Action? UiLanguageChanged;
 
     public string UiWindowTitle => "humanize_input";
@@ -104,6 +107,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string BackspaceDelayDisplayText => Translate($"当前: {BackspaceDelayMs} ms", $"Current: {BackspaceDelayMs} ms");
     public string StartHotkeyLabelText => Translate("开始热键", "Start Hotkey");
     public string PauseHotkeyLabelText => Translate("暂停/继续热键", "Pause/Resume Hotkey");
+    public string CancelHotkeyLabelText => Translate("取消热键", "Cancel Hotkey");
     public string ApplyHotkeysButtonText => Translate("应用热键", "Apply Hotkeys");
     public string HotkeyExampleTooltipText => Translate("示例: Ctrl+Alt+S", "Example: Ctrl+Alt+S");
     public string TrayHintText => Translate("程序启动后会自动最小化到托盘。双击托盘图标可恢复窗口。", "The app auto-minimizes to tray on startup. Double-click the tray icon to restore.");
@@ -313,16 +317,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public string CancelHotkeyText
+    {
+        get => _cancelHotkeyText;
+        set
+        {
+            if (SetField(ref _cancelHotkeyText, value))
+            {
+                QueueSettingsSave();
+            }
+        }
+    }
+
     public void FlushSettings()
     {
         SaveSettingsNow();
     }
 
-    public void ReportHotkeyRegistrationResult(bool success, string startHotkeyText, string pauseHotkeyText)
+    public void ReportHotkeyRegistrationResult(bool success, string startHotkeyText, string pauseHotkeyText, string cancelHotkeyText)
     {
         if (success)
         {
-            SetStatusDetail(Translate($"全局热键已生效（开始: {startHotkeyText}，暂停: {pauseHotkeyText}）", $"Global hotkeys active (Start: {startHotkeyText}, Pause: {pauseHotkeyText})."));
+            SetStatusDetail(Translate($"全局热键已生效（开始: {startHotkeyText}，暂停: {pauseHotkeyText}，取消: {cancelHotkeyText}）", $"Global hotkeys active (Start: {startHotkeyText}, Pause: {pauseHotkeyText}, Cancel: {cancelHotkeyText})."));
         }
         else
         {
@@ -340,6 +356,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         TogglePauseResume();
     }
 
+    public void TriggerCancelHotkey()
+    {
+        CancelSession();
+    }
+
     private void StartSession()
     {
         StartSession(targetWindowOverride: null);
@@ -347,25 +368,49 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async void StartSession(nint? targetWindowOverride)
     {
+        if (_session.IsBusy || _isStartPending)
+        {
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(InputText))
         {
             System.Windows.MessageBox.Show(Translate("请先粘贴文本。", "Please paste text first."), UiWindowTitle, System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
             return;
         }
 
+        _pendingStartCts?.Cancel();
+        _pendingStartCts?.Dispose();
+        _pendingStartCts = new CancellationTokenSource();
+        _isStartPending = true;
+        ResetProgressTracking();
         SetStatusDetail(Translate($"准备开始，{LeadInDelayMs}ms 后抓取目标窗口", $"Preparing to start; capture target window in {LeadInDelayMs} ms."));
-        await Task.Delay(LeadInDelayMs);
-
-        nint targetWindow = targetWindowOverride ?? _driver.GetForegroundWindowHandle();
-        TypingSettings settings = BuildSettings();
-
-        bool started = _session.Start(InputText, settings, targetWindow);
-        if (!started)
-        {
-            SetStatusDetail(Translate("无法开始（已有会话或输入为空）", "Unable to start (session already running or input is empty)."));
-        }
-
         RefreshCommands();
+
+        try
+        {
+            await Task.Delay(LeadInDelayMs, _pendingStartCts.Token);
+
+            nint targetWindow = targetWindowOverride ?? _driver.GetForegroundWindowHandle();
+            TypingSettings settings = BuildSettings();
+
+            bool started = _session.Start(InputText, settings, targetWindow);
+            if (!started)
+            {
+                SetStatusDetail(Translate("无法开始（已有会话或输入为空）", "Unable to start (session already running or input is empty)."));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatusDetail(Translate("已取消当前输入进度。", "Canceled current typing progress."));
+        }
+        finally
+        {
+            _pendingStartCts?.Dispose();
+            _pendingStartCts = null;
+            _isStartPending = false;
+            RefreshCommands();
+        }
     }
 
     private void TogglePauseResume()
@@ -384,8 +429,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void ApplyHotkeys()
     {
-        HotkeyUpdateRequested?.Invoke(StartHotkeyText, PauseHotkeyText);
+        HotkeyUpdateRequested?.Invoke(StartHotkeyText, PauseHotkeyText, CancelHotkeyText);
         SetStatusDetail(Translate("已请求更新全局热键", "Requested global hotkey update."));
+    }
+
+    private void CancelSession()
+    {
+        bool canceledPendingStart = CancelPendingStart();
+        bool canceledRunningSession = _session.IsBusy;
+
+        if (canceledRunningSession)
+        {
+            _session.Stop(canceled: true);
+            ResetProgressTracking();
+        }
+        else if (canceledPendingStart)
+        {
+            ResetProgressTracking();
+            SetStatusDetail(Translate("已取消当前输入进度。", "Canceled current typing progress."));
+            RefreshCommands();
+        }
     }
 
     private void ToggleLanguage()
@@ -453,6 +516,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             LeadInDelayMs = loaded.LeadInDelayMs;
             StartHotkeyText = loaded.StartHotkeyText;
             PauseHotkeyText = loaded.PauseHotkeyText;
+            CancelHotkeyText = loaded.CancelHotkeyText;
         }
         finally
         {
@@ -475,7 +539,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             BackspaceDelayMs = BackspaceDelayMs,
             LeadInDelayMs = LeadInDelayMs,
             StartHotkeyText = StartHotkeyText,
-            PauseHotkeyText = PauseHotkeyText
+            PauseHotkeyText = PauseHotkeyText,
+            CancelHotkeyText = CancelHotkeyText
         };
     }
 
@@ -584,6 +649,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             "会话已暂停。" => "Session paused.",
             "会话已继续。" => "Session resumed.",
             "会话已停止。" => "Session stopped.",
+            "会话已取消。" => "Session canceled.",
             "检测到目标窗口失焦，等待焦点恢复后自动继续。" => "Target window lost focus; waiting and will resume automatically when focus returns.",
             "目标窗口焦点已恢复，继续输入。" => "Target focus restored; continue typing.",
             "会话输入完成。" => "Typing session completed.",
@@ -617,6 +683,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(BackspaceDelayDisplayText));
         OnPropertyChanged(nameof(StartHotkeyLabelText));
         OnPropertyChanged(nameof(PauseHotkeyLabelText));
+        OnPropertyChanged(nameof(CancelHotkeyLabelText));
         OnPropertyChanged(nameof(ApplyHotkeysButtonText));
         OnPropertyChanged(nameof(HotkeyExampleTooltipText));
         OnPropertyChanged(nameof(TrayHintText));
@@ -667,6 +734,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void OnPropertyChanged(string propertyName)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private bool CancelPendingStart()
+    {
+        if (!_isStartPending || _pendingStartCts is null)
+        {
+            return false;
+        }
+
+        _pendingStartCts.Cancel();
+        return true;
+    }
+
+    private void ResetProgressTracking()
+    {
+        _lastProgress = new TypingProgress
+        {
+            TotalChars = InputText.Length,
+            TypedChars = 0,
+            TypoCount = 0,
+            OmissionCount = 0,
+            TransposeCount = 0,
+            CorrectionCount = 0
+        };
+        UpdateProgressText();
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

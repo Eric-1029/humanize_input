@@ -137,6 +137,9 @@
                                     <TextBlock Text="{Binding PauseHotkeyLabelText}" FontWeight="SemiBold"/>
                                     <TextBox Text="{Binding PauseHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}" Margin="0,2,0,8"/>
 
+                                    <TextBlock Text="{Binding CancelHotkeyLabelText}" FontWeight="SemiBold"/>
+                                    <TextBox Text="{Binding CancelHotkeyText, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding HotkeyExampleTooltipText}" Margin="0,2,0,8"/>
+
                                     <Button Content="{Binding ApplyHotkeysButtonText}" Width="108" Height="30" HorizontalAlignment="Left" Command="{Binding ApplyHotkeysCommand}" Margin="0,0,0,8"/>
 
                                     <Separator Margin="0,0,0,8"/>

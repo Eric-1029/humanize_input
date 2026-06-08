@@ -98,12 +98,12 @@ public sealed class TypingSessionService
         LogProduced?.Invoke("会话已继续。");
     }
 
-    public void Stop()
+    public void Stop(bool canceled = false)
     {
         _cts?.Cancel();
         _pauseGate.Set();
         SetState(SessionState.Idle);
-        LogProduced?.Invoke("会话已停止。");
+        LogProduced?.Invoke(canceled ? "会话已取消。" : "会话已停止。");
     }
 
     private async Task RunSessionAsync(string text, TypingSettings settings, nint targetWindow, CancellationToken cancellationToken)

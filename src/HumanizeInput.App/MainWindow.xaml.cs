@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private const int WmNchittest = 0x0084;
     private const int StartHotkeyId = 9001;
     private const int PauseHotkeyId = 9002;
+    private const int CancelHotkeyId = 9003;
     private const int HtLeft = 10;
     private const int HtRight = 11;
     private const int HtTop = 12;
@@ -61,7 +62,7 @@ public partial class MainWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         EnsureTrayIcon();
-        RegisterHotkeys(_viewModel.StartHotkeyText, _viewModel.PauseHotkeyText);
+        RegisterHotkeys(_viewModel.StartHotkeyText, _viewModel.PauseHotkeyText, _viewModel.CancelHotkeyText);
         HideToTray();
     }
 
@@ -219,7 +220,7 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void RegisterHotkeys(string startHotkeyText, string pauseHotkeyText)
+    private void RegisterHotkeys(string startHotkeyText, string pauseHotkeyText, string cancelHotkeyText)
     {
         nint handle = new WindowInteropHelper(this).Handle;
         if (handle == nint.Zero)
@@ -229,10 +230,12 @@ public partial class MainWindow : Window
 
         UnregisterHotKey(handle, StartHotkeyId);
         UnregisterHotKey(handle, PauseHotkeyId);
+        UnregisterHotKey(handle, CancelHotkeyId);
 
         bool startOk = TryRegisterOne(handle, StartHotkeyId, startHotkeyText);
         bool pauseOk = TryRegisterOne(handle, PauseHotkeyId, pauseHotkeyText);
-        _viewModel.ReportHotkeyRegistrationResult(startOk && pauseOk, startHotkeyText, pauseHotkeyText);
+        bool cancelOk = TryRegisterOne(handle, CancelHotkeyId, cancelHotkeyText);
+        _viewModel.ReportHotkeyRegistrationResult(startOk && pauseOk && cancelOk, startHotkeyText, pauseHotkeyText, cancelHotkeyText);
     }
 
     private void UpdateTrayMenuItemsText()
@@ -271,6 +274,7 @@ public partial class MainWindow : Window
 
         UnregisterHotKey(handle, StartHotkeyId);
         UnregisterHotKey(handle, PauseHotkeyId);
+        UnregisterHotKey(handle, CancelHotkeyId);
     }
 
     private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
@@ -302,6 +306,11 @@ public partial class MainWindow : Window
         else if (id == PauseHotkeyId)
         {
             _viewModel.TriggerPauseResumeHotkey();
+            handled = true;
+        }
+        else if (id == CancelHotkeyId)
+        {
+            _viewModel.TriggerCancelHotkey();
             handled = true;
         }
 

@@ -73,6 +73,7 @@ public sealed class IniSettingsStore
         sb.AppendLine("[hotkeys]");
         sb.AppendLine($"start_hotkey={settings.StartHotkeyText}");
         sb.AppendLine($"pause_hotkey={settings.PauseHotkeyText}");
+        sb.AppendLine($"cancel_hotkey={settings.CancelHotkeyText}");
 
         File.WriteAllText(_filePath, sb.ToString(), Encoding.UTF8);
     }
@@ -117,6 +118,9 @@ public sealed class IniSettingsStore
             case "pause_hotkey":
                 settings.PauseHotkeyText = string.IsNullOrWhiteSpace(value) ? settings.PauseHotkeyText : value;
                 break;
+            case "cancel_hotkey":
+                settings.CancelHotkeyText = string.IsNullOrWhiteSpace(value) ? settings.CancelHotkeyText : value;
+                break;
         }
     }
 
@@ -142,7 +146,8 @@ public sealed class IniSettingsStore
             BackspaceDelayMs = source.BackspaceDelayMs,
             LeadInDelayMs = source.LeadInDelayMs,
             StartHotkeyText = source.StartHotkeyText,
-            PauseHotkeyText = source.PauseHotkeyText
+            PauseHotkeyText = source.PauseHotkeyText,
+            CancelHotkeyText = source.CancelHotkeyText
         };
     }
 }
