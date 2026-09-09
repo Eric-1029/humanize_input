@@ -27,24 +27,21 @@ public sealed class WindowsSendInputDriver : ITypingDriver
         {
             try
             {
-                if (requiresShift)
-                {
-                    SendVirtualKeyDown(VkShift);
-                }
-
-                SendVirtualKey(vk);
-
-                if (requiresShift)
-                {
-                    SendVirtualKeyUp(VkShift);
-                }
-
+                SendVirtualKey(vk, requiresShift);
                 await Task.Yield();
                 return;
             }
-            catch (InvalidOperationException)
+            catch
             {
-                // Fall through to Unicode path when a target control rejects VK events.
+                // A partial SendInput call can leave keys pressed. Release them without
+                // retrying the character, which could otherwise produce duplicate input.
+                TrySendVirtualKeyUp(vk);
+                if (requiresShift)
+                {
+                    TrySendVirtualKeyUp(VkShift);
+                }
+
+                throw;
             }
         }
 
@@ -217,58 +214,48 @@ public sealed class WindowsSendInputDriver : ITypingDriver
         }
     }
 
-    private static void SendVirtualKey(ushort vk)
+    private static void SendVirtualKey(ushort vk, bool requiresShift)
     {
-        SendVirtualKeyDown(vk);
-        SendVirtualKeyUp(vk);
-    }
-
-    private static void SendVirtualKeyDown(ushort vk)
-    {
-        INPUT[] inputs =
-        [
-            new INPUT
-            {
-                type = InputKeyboard,
-                U = new InputUnion
-                {
-                    ki = new KEYBDINPUT
-                    {
-                        wVk = vk,
-                        wScan = 0,
-                        dwFlags = 0,
-                        time = 0,
-                        dwExtraInfo = nint.Zero
-                    }
-                }
-            }
-        ];
+        INPUT[] inputs = requiresShift
+            ?
+            [
+                CreateVirtualKeyInput(VkShift, keyup: false),
+                CreateVirtualKeyInput(vk, keyup: false),
+                CreateVirtualKeyInput(vk, keyup: true),
+                CreateVirtualKeyInput(VkShift, keyup: true)
+            ]
+            :
+            [
+                CreateVirtualKeyInput(vk, keyup: false),
+                CreateVirtualKeyInput(vk, keyup: true)
+            ];
 
         SendInputOrThrow(inputs);
     }
 
-    private static void SendVirtualKeyUp(ushort vk)
+    private static INPUT CreateVirtualKeyInput(ushort vk, bool keyup)
     {
-        INPUT[] inputs =
-        [
-            new INPUT
+        return new INPUT
+        {
+            type = InputKeyboard,
+            U = new InputUnion
             {
-                type = InputKeyboard,
-                U = new InputUnion
+                ki = new KEYBDINPUT
                 {
-                    ki = new KEYBDINPUT
-                    {
-                        wVk = vk,
-                        wScan = 0,
-                        dwFlags = KeyeventfKeyup,
-                        time = 0,
-                        dwExtraInfo = nint.Zero
-                    }
+                    wVk = vk,
+                    wScan = 0,
+                    dwFlags = keyup ? KeyeventfKeyup : 0,
+                    time = 0,
+                    dwExtraInfo = nint.Zero
                 }
             }
-        ];
+        };
+    }
 
-        SendInputOrThrow(inputs);
+    private static void TrySendVirtualKeyUp(ushort vk)
+    {
+        INPUT[] inputs = [CreateVirtualKeyInput(vk, keyup: true)];
+        _ = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
     [StructLayout(LayoutKind.Sequential)]

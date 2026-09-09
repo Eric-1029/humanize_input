@@ -59,17 +59,19 @@ public sealed class TypingSessionService
 
         lock (_sync)
         {
-            if (IsBusy)
+            if (_cts is not null)
             {
                 LogProduced?.Invoke("已有会话在运行或暂停中。");
                 return false;
             }
 
-            _cts = new CancellationTokenSource();
+            string normalizedText = NormalizeNewlines(text);
+            CancellationTokenSource sessionCts = new();
+            _cts = sessionCts;
             _pauseGate.Set();
             SetState(SessionState.Running);
 
-            _runningTask = Task.Run(() => RunSessionAsync(text, settings, targetWindow, _cts.Token));
+            _runningTask = Task.Run(() => RunSessionAsync(normalizedText, settings, targetWindow, sessionCts));
             return true;
         }
     }
@@ -100,14 +102,18 @@ public sealed class TypingSessionService
 
     public void Stop(bool canceled = false)
     {
-        _cts?.Cancel();
-        _pauseGate.Set();
-        SetState(SessionState.Idle);
+        lock (_sync)
+        {
+            _cts?.Cancel();
+            _pauseGate.Set();
+        }
+
         LogProduced?.Invoke(canceled ? "会话已取消。" : "会话已停止。");
     }
 
-    private async Task RunSessionAsync(string text, TypingSettings settings, nint targetWindow, CancellationToken cancellationToken)
+    private async Task RunSessionAsync(string text, TypingSettings settings, nint targetWindow, CancellationTokenSource sessionCts)
     {
+        CancellationToken cancellationToken = sessionCts.Token;
         Random random = new();
 
         TypingProgress progress = new()
@@ -146,23 +152,23 @@ public sealed class TypingSessionService
                 if (typo)
                 {
                     char wrong = BuildWrongChar(current, random);
-                    await _driver.TypeCharAsync(wrong, cancellationToken);
+                    await TypeCharToTargetAsync(wrong, targetWindow, cancellationToken);
 
                     if (willRepair)
                     {
                         int lookaheadCount = GetLookaheadCount(random, text.Length - (index + 1));
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         await Task.Delay(settings.ErrorDetectDelayMs, cancellationToken);
-                        await BackspaceTimesAsync(lookaheadCount + 1, settings.BackspaceDelayMs, cancellationToken);
-                        await _driver.TypeCharAsync(current, cancellationToken);
+                        await BackspaceTimesAsync(lookaheadCount + 1, settings.BackspaceDelayMs, targetWindow, cancellationToken);
+                        await TypeCharToTargetAsync(current, targetWindow, cancellationToken);
 
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         int consumed = 1 + lookaheadCount;
@@ -198,16 +204,16 @@ public sealed class TypingSessionService
                         int lookaheadCount = GetLookaheadCount(random, text.Length - (index + 1));
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         await Task.Delay(settings.ErrorDetectDelayMs, cancellationToken);
-                        await BackspaceTimesAsync(lookaheadCount, settings.BackspaceDelayMs, cancellationToken);
-                        await _driver.TypeCharAsync(current, cancellationToken);
+                        await BackspaceTimesAsync(lookaheadCount, settings.BackspaceDelayMs, targetWindow, cancellationToken);
+                        await TypeCharToTargetAsync(current, targetWindow, cancellationToken);
 
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 1, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         int consumed = 1 + lookaheadCount;
@@ -239,27 +245,27 @@ public sealed class TypingSessionService
                 else if (transpose)
                 {
                     char next = text[index + 1];
-                    await _driver.TypeCharAsync(next, cancellationToken);
+                    await TypeCharToTargetAsync(next, targetWindow, cancellationToken);
                     await Task.Delay(Math.Max(10, settings.BackspaceDelayMs / 2), cancellationToken);
-                    await _driver.TypeCharAsync(current, cancellationToken);
+                    await TypeCharToTargetAsync(current, targetWindow, cancellationToken);
 
                     if (willRepair)
                     {
                         int lookaheadCount = GetLookaheadCount(random, text.Length - (index + 2));
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 2, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 2, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         await Task.Delay(settings.ErrorDetectDelayMs, cancellationToken);
-                        await BackspaceTimesAsync(lookaheadCount + 2, settings.BackspaceDelayMs, cancellationToken);
-                        await _driver.TypeCharAsync(current, cancellationToken);
+                        await BackspaceTimesAsync(lookaheadCount + 2, settings.BackspaceDelayMs, targetWindow, cancellationToken);
+                        await TypeCharToTargetAsync(current, targetWindow, cancellationToken);
                         await Task.Delay(Math.Max(10, settings.BackspaceDelayMs / 2), cancellationToken);
-                        await _driver.TypeCharAsync(next, cancellationToken);
+                        await TypeCharToTargetAsync(next, targetWindow, cancellationToken);
 
                         if (lookaheadCount > 0)
                         {
-                            await TypeForwardRangeAsync(text, index + 2, lookaheadCount, cancellationToken);
+                            await TypeForwardRangeAsync(text, index + 2, lookaheadCount, targetWindow, cancellationToken);
                         }
 
                         int consumed = 2 + lookaheadCount;
@@ -290,7 +296,7 @@ public sealed class TypingSessionService
                 }
                 else
                 {
-                    await _driver.TypeCharAsync(current, cancellationToken);
+                    await TypeCharToTargetAsync(current, targetWindow, cancellationToken);
 
                     progress = new TypingProgress
                     {
@@ -323,17 +329,34 @@ public sealed class TypingSessionService
         }
         finally
         {
+            bool publishIdle = false;
             lock (_sync)
             {
-                _cts?.Dispose();
-                _cts = null;
-                _runningTask = null;
+                if (ReferenceEquals(_cts, sessionCts))
+                {
+                    if (State is not SessionState.Faulted and not SessionState.Completed)
+                    {
+                        State = SessionState.Idle;
+                        publishIdle = true;
+                    }
+                }
             }
 
-            if (State is not SessionState.Faulted and not SessionState.Completed)
+            if (publishIdle)
             {
-                SetState(SessionState.Idle);
+                StateChanged?.Invoke(SessionState.Idle);
             }
+
+            lock (_sync)
+            {
+                if (ReferenceEquals(_cts, sessionCts))
+                {
+                    _cts = null;
+                    _runningTask = null;
+                }
+            }
+
+            sessionCts.Dispose();
         }
     }
 
@@ -441,21 +464,33 @@ public sealed class TypingSessionService
         return Math.Min(candidate, remaining);
     }
 
-    private async Task TypeForwardRangeAsync(string text, int startIndex, int count, CancellationToken cancellationToken)
+    private async Task TypeForwardRangeAsync(string text, int startIndex, int count, nint targetWindow, CancellationToken cancellationToken)
     {
         for (int i = 0; i < count; i++)
         {
-            await _driver.TypeCharAsync(text[startIndex + i], cancellationToken);
+            await TypeCharToTargetAsync(text[startIndex + i], targetWindow, cancellationToken);
         }
     }
 
-    private async Task BackspaceTimesAsync(int count, int backspaceDelayMs, CancellationToken cancellationToken)
+    private async Task BackspaceTimesAsync(int count, int backspaceDelayMs, nint targetWindow, CancellationToken cancellationToken)
     {
         for (int i = 0; i < count; i++)
         {
+            await WaitForTargetFocusAsync(targetWindow, cancellationToken);
             await _driver.BackspaceAsync(cancellationToken);
             await Task.Delay(backspaceDelayMs, cancellationToken);
         }
+    }
+
+    private async Task TypeCharToTargetAsync(char value, nint targetWindow, CancellationToken cancellationToken)
+    {
+        await WaitForTargetFocusAsync(targetWindow, cancellationToken);
+        await _driver.TypeCharAsync(value, cancellationToken);
+    }
+
+    private static string NormalizeNewlines(string text)
+    {
+        return text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
     }
 
     private static Dictionary<char, (int row, int col)> BuildKeyPositions()
