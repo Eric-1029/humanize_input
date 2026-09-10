@@ -17,7 +17,8 @@ Windows-native human-like typing simulator built with C# and WPF.
 - Global hotkeys for Start and Pause/Resume (customizable)
 - Auto-minimize to tray on startup, double-click tray icon to restore
 - Auto-wait on focus loss and continue when focus returns
-- Proportional UI scaling (sliders remain visible in windowed mode)
+- Translucent main window with responsive parameter cards and readable, scrollable layouts
+- Numeric editors beside all nine sliders, with allowed ranges displayed underneath
 - Bilingual UI toggle (文 / A) with Chinese/English labels and help text
 - Typing detector window that records a sample and fits simulation parameters
 - Automatic settings persistence to INI
@@ -37,7 +38,7 @@ Install .NET 8 SDK and Windows Desktop Runtime first.
 
 ## Direct Run
 
-If you download a release ZIP package, such as `dist/humanize_input-v1.1.2-win-x64.zip`, unzip it and double-click `HumanizeInput.App.exe` to start. You do not need to compile from source. On startup, the app auto-minimizes to the tray; if the main window does not stay visible and you only see a tray presence or small window, that is expected and means the app started correctly.
+If you download a release ZIP package, such as `dist/humanize_input-v1.1.5-win-x64.zip`, unzip it and double-click `HumanizeInput.App.exe` to start. You do not need to compile from source. On startup, the app auto-minimizes to the tray; if the main window does not stay visible and you only see a tray presence or small window, that is expected and means the app started correctly.
 
 ## Build and Run
 
@@ -50,6 +51,8 @@ dotnet run --project .\src\HumanizeInput.App\HumanizeInput.App.csproj
 
 1. Paste target text into the main textbox.
 2. Adjust typing parameters (speed, jitter, typo rate, omission rate, transposition rate, repair rate).
+
+   Parameters are grouped into typing rhythm, error simulation, and correction behavior. Use a slider or edit its number directly: Enter or moving focus commits the value, Escape restores it. Out-of-range integers are clamped; invalid or empty input restores the previous value. Narrow windows wrap the cards into fewer columns and scroll without shrinking the text. Start, Pause/Resume, and Cancel remain available at the bottom.
 3. Configure and apply global hotkeys (default: Start `Ctrl+Alt+S`, Pause/Resume `Ctrl+Alt+P`).
 4. Open the settings popup and launch the typing detector if you want to fit parameters from a real sample.
 5. The app auto-minimizes to tray. Double-click tray icon to restore.

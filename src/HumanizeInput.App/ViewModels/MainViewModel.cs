@@ -84,6 +84,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public event Action? UiLanguageChanged;
 
     public string UiWindowTitle => "humanize_input";
+    public string CorrectionSectionTitle => Translate("修正行为", "Correction behavior");
+    public string StartButtonText => Translate("开始输入", "Start typing");
+    public string PauseButtonText => Translate("暂停 / 继续", "Pause / Resume");
+    public string CancelButtonText => Translate("取消", "Cancel");
+    public string MinimizeText => Translate("最小化到托盘", "Minimize to tray");
+    public string MaximizeText => Translate("最大化 / 还原", "Maximize / Restore");
+    public string HideWindowText => Translate("隐藏到托盘", "Hide to tray");
     public string InputSectionTitle => Translate("要输入的文本", "Text To Type");
     public string TypingRhythmSectionTitle => Translate("输入节奏", "Typing Rhythm");
     public string BaseDelayLabelText => Translate("基础延迟 (ms)", "Base Delay (ms)");
@@ -659,6 +666,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void RaiseLocalizationChanged()
     {
+        OnPropertyChanged(nameof(CorrectionSectionTitle));
+        OnPropertyChanged(nameof(StartButtonText));
+        OnPropertyChanged(nameof(PauseButtonText));
+        OnPropertyChanged(nameof(CancelButtonText));
+        OnPropertyChanged(nameof(MinimizeText));
+        OnPropertyChanged(nameof(MaximizeText));
+        OnPropertyChanged(nameof(HideWindowText));
         OnPropertyChanged(nameof(UiWindowTitle));
         OnPropertyChanged(nameof(InputSectionTitle));
         OnPropertyChanged(nameof(TypingRhythmSectionTitle));

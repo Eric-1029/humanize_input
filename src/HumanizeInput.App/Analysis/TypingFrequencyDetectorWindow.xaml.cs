@@ -15,6 +15,12 @@ public partial class TypingFrequencyDetectorWindow : Window
 
     public TypingFitResult? Result => ViewModel.LatestResult;
 
+    private void OnColumnsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        int columns = e.NewSize.Width >= 740 ? 2 : 1;
+        DetectorColumns.ItemWidth = Math.Max(1, e.NewSize.Width / columns);
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         TypingAreaBox.Focus();

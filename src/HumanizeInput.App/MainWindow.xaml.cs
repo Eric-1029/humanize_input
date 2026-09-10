@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private const int HtBottomLeft = 16;
     private const int HtBottomRight = 17;
     private const double ResizeBorderThickness = 8d;
+    private const double ResizeCornerLength = 24d;
 
     private readonly MainViewModel _viewModel;
     private HwndSource? _hwndSource;
@@ -65,6 +66,29 @@ public partial class MainWindow : Window
         RegisterHotkeys(_viewModel.StartHotkeyText, _viewModel.PauseHotkeyText, _viewModel.CancelHotkeyText);
         HideToTray();
     }
+
+    private void OnParameterCardsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        int columns = Math.Clamp((int)(e.NewSize.Width / 300), 1, 3);
+        ParameterCards.ItemWidth = Math.Max(1, e.NewSize.Width / columns);
+    }
+
+    private void OnTitleMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) ToggleMaximize();
+        else if (e.LeftButton == MouseButtonState.Pressed) DragMove();
+    }
+
+    private void ToggleMaximize()
+    {
+        MaxHeight = SystemParameters.WorkArea.Height;
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void OnMinimizeClick(object sender, RoutedEventArgs e) => HideToTray();
+    private void OnMaximizeClick(object sender, RoutedEventArgs e) => ToggleMaximize();
+    private void OnHideClick(object sender, RoutedEventArgs e) => HideToTray();
+    private void OnCancelClick(object sender, RoutedEventArgs e) => _viewModel.TriggerCancelHotkey();
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -145,12 +169,23 @@ public partial class MainWindow : Window
 
         _trayIcon = new Forms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadApplicationIcon(),
             Text = "humanize_input",
             Visible = true,
             ContextMenuStrip = menu
         };
         _trayIcon.DoubleClick += (_, _) => ShowFromTray();
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        Uri iconUri = new("pack://application:,,,/Assets/humanized_input_logo.ico", UriKind.Absolute);
+        System.Windows.Resources.StreamResourceInfo resource = System.Windows.Application.GetResourceStream(iconUri)
+            ?? throw new InvalidOperationException("Application icon resource was not found.");
+
+        using Stream stream = resource.Stream;
+        using Icon icon = new(stream);
+        return (Icon)icon.Clone();
     }
 
     private void HideToTray()
@@ -339,23 +374,27 @@ public partial class MainWindow : Window
         bool isRight = point.X >= ActualWidth - ResizeBorderThickness;
         bool isTop = point.Y <= ResizeBorderThickness;
         bool isBottom = point.Y >= ActualHeight - ResizeBorderThickness;
+        bool isNearLeftCorner = point.X <= ResizeCornerLength;
+        bool isNearRightCorner = point.X >= ActualWidth - ResizeCornerLength;
+        bool isNearTopCorner = point.Y <= ResizeCornerLength;
+        bool isNearBottomCorner = point.Y >= ActualHeight - ResizeCornerLength;
 
-        if (isTop && isLeft)
+        if ((isTop && isNearLeftCorner) || (isLeft && isNearTopCorner))
         {
             return (nint)HtTopLeft;
         }
 
-        if (isTop && isRight)
+        if ((isTop && isNearRightCorner) || (isRight && isNearTopCorner))
         {
             return (nint)HtTopRight;
         }
 
-        if (isBottom && isLeft)
+        if ((isBottom && isNearLeftCorner) || (isLeft && isNearBottomCorner))
         {
             return (nint)HtBottomLeft;
         }
 
-        if (isBottom && isRight)
+        if ((isBottom && isNearRightCorner) || (isRight && isNearBottomCorner))
         {
             return (nint)HtBottomRight;
         }

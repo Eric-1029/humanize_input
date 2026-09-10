@@ -6,10 +6,18 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.1.5</Version>
+    <AssemblyVersion>1.1.5.0</AssemblyVersion>
+    <FileVersion>1.1.5.0</FileVersion>
+    <ApplicationIcon>Assets\humanized_input_logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HumanizeInput.Core\HumanizeInput.Core.csproj" />
     <ProjectReference Include="..\HumanizeInput.Infra\HumanizeInput.Infra.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\humanized_input_logo.ico" />
   </ItemGroup>
 </Project>
