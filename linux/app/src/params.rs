@@ -1,7 +1,7 @@
 //! Every adjustable value of the two typing models, with names, one-line
 //! explanations, ranges and units, so the parameter page is built from data.
 
-use humanize_core::{HumanModel, TypingSettings};
+use humanize_core::HumanModel;
 
 pub struct Param {
     /// The `HumanModel` field name.
@@ -418,33 +418,6 @@ pub fn human(id: &str) -> Option<&'static Param> {
     HUMAN.iter().flat_map(|g| g.params.iter()).find(|p| p.id == id)
 }
 
-pub struct ClassicParam {
-    pub zh: &'static str,
-    pub en: &'static str,
-    pub max: u32,
-    pub unit: &'static str,
-    pub get: fn(&TypingSettings) -> u32,
-    pub set: fn(&mut TypingSettings, u32),
-}
-
-macro_rules! c {
-    ($field:ident, $zh:literal, $en:literal, $max:expr, $unit:literal) => {
-        ClassicParam { zh: $zh, en: $en, max: $max, unit: $unit, get: |s| s.$field, set: |s, v| s.$field = v }
-    };
-}
-
-/// The original model's eight values (lead-in lives in Settings).
-pub static CLASSIC: &[ClassicParam] = &[
-    c!(base_delay_ms, "基础延迟", "Base delay", 2000, "ms"),
-    c!(jitter_percent, "抖动", "Jitter", 100, "%"),
-    c!(typo_rate_percent, "错字率", "Typo rate", 100, "%"),
-    c!(omission_rate_percent, "漏写率", "Omission rate", 100, "%"),
-    c!(transpose_rate_percent, "颠倒率", "Transpose rate", 100, "%"),
-    c!(repair_rate_percent, "修复率", "Repair rate", 100, "%"),
-    c!(error_detect_delay_ms, "错误发现延迟", "Error detect delay", 10000, "ms"),
-    c!(backspace_delay_ms, "回删延迟", "Backspace delay", 2000, "ms"),
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +438,5 @@ mod tests {
         }
         // All numeric fields of HumanModel (everything but word_delete and lead_in_ms).
         assert_eq!(seen, 28);
-        assert_eq!(CLASSIC.len(), 8);
     }
 }

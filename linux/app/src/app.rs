@@ -9,10 +9,10 @@ use std::time::{Duration, Instant};
 use gtk::glib;
 use gtk::prelude::*;
 use humanize_core::{
-    ClassicKeys, HumanPlanner, KeyAction, Layout, LogEvent, Macros, Planner, Preset, Session, SessionEvent,
-    SessionState, StartError, TypingMode, TypingProgress, WordDelete,
+    HumanPlanner, KeyAction, Layout, LogEvent, Macros, Preset, Session, SessionEvent, SessionState,
+    StartError, TypingProgress, WordDelete,
 };
-use humanize_desktop::config::{Language, ModelKind, Theme};
+use humanize_desktop::config::{Language, Theme};
 use humanize_desktop::{
     BoundHotkey, Config, Desktop, DesktopEvent, DesktopOptions, HotkeyAction, HotkeyRequest, TrayCommand,
     TrayLabels,
@@ -632,14 +632,8 @@ impl App {
             return None;
         }
         let layout = Arc::clone(&self.layout.borrow());
-        let mode = self.config.borrow().typing_mode();
-        let actions: Box<dyn Iterator<Item = KeyAction>> = match mode {
-            TypingMode::Human(model) => Box::new(HumanPlanner::with_seed(&text, model, layout, 1)),
-            TypingMode::Classic(settings) => {
-                let geometry = Arc::new(layout.classic_geometry());
-                Box::new(ClassicKeys::new(Planner::with_seed(&text, settings, geometry, 1), layout))
-            }
-        };
+        let model = self.config.borrow().human_model();
+        let actions = HumanPlanner::with_seed(&text, model, layout, 1);
         Some(actions.filter_map(|a| if let KeyAction::Wait(d) = a { Some(d) } else { None }).sum())
     }
 
@@ -1372,103 +1366,79 @@ impl App {
         let profile = panel();
         profile.append(&panel_head(&pair("Profile", &tr.t("档位", "Profile")), None));
 
-        let model_seg = {
-            let app = Rc::clone(self);
-            seg(
-                &[tr.t("拟人", "Human"), tr.t("原版", "Original")],
-                Some(usize::from(c.model == ModelKind::Classic)),
-                move |i| {
-                    app.update_config(|c| {
-                        c.model = if i == 0 { ModelKind::Human } else { ModelKind::Classic }
-                    });
-                    app.rebuild();
-                },
-            )
-        };
-        profile.append(&setting_row(
-            &tr.t("模型", "Model"),
-            &tr.t(
-                "拟人：按键级节奏和更多种错误。原版：与 Windows 版一致。",
-                "Human: key-level rhythm and more kinds of mistakes. Original: same as the Windows build.",
-            ),
-            &model_seg,
-        ));
-
-        if c.model == ModelKind::Human {
-            let presets = [
-                (Preset::Novice, tr.t("生疏", "Novice")),
-                (Preset::Average, tr.t("普通", "Average")),
-                (Preset::Proficient, tr.t("熟练", "Skilled")),
-                (Preset::Professional, tr.t("打字员", "Typist")),
-            ];
-            let active =
-                if c.advanced.is_some() { None } else { presets.iter().position(|(p, _)| *p == c.preset) };
-            let names: Vec<String> = presets.iter().map(|(_, n)| n.clone()).collect();
-            let app = Rc::clone(self);
-            let preset_seg = seg(&names, active, move |i| {
-                app.update_config(|c| {
-                    c.preset = presets[i].0;
-                    c.advanced = None;
-                });
+        let presets = [
+            (Preset::Novice, tr.t("生疏", "Novice")),
+            (Preset::Average, tr.t("普通", "Average")),
+            (Preset::Proficient, tr.t("熟练", "Skilled")),
+            (Preset::Professional, tr.t("打字员", "Typist")),
+        ];
+        let active =
+            if c.advanced.is_some() { None } else { presets.iter().position(|(p, _)| *p == c.preset) };
+        let names: Vec<String> = presets.iter().map(|(_, n)| n.clone()).collect();
+        let app = Rc::clone(self);
+        let preset_seg = seg(&names, active, move |i| {
+            app.update_config(|c| {
+                c.preset = presets[i].0;
+                c.advanced = None;
             });
-            let hint = if c.advanced.is_some() {
-                tr.t(
-                    "当前用的是“参数”页里的自定义值；选一个档位可以恢复。",
-                    "Using custom values from the Tuning page; pick a profile to go back.",
-                )
-            } else {
-                String::new()
-            };
-            profile.append(&setting_row(&tr.t("档位", "Profile"), &hint, &preset_seg));
+        });
+        let hint = if c.advanced.is_some() {
+            tr.t(
+                "当前用的是“参数”页里的自定义值；选一个档位可以恢复。",
+                "Using custom values from the Tuning page; pick a profile to go back.",
+            )
+        } else {
+            String::new()
+        };
+        profile.append(&setting_row(&tr.t("档位", "Profile"), &hint, &preset_seg));
 
-            for (name, hint, get, set) in [
-                (
-                    tr.t("速度", "Speed"),
-                    tr.t(
-                        "50 为档位原值；0 慢一半，100 快一倍。",
-                        "50 is the profile as is; 0 is half as fast, 100 twice as fast.",
-                    ),
-                    (|m: &Macros| m.speed) as fn(&Macros) -> u8,
-                    (|m: &mut Macros, v| m.speed = v) as fn(&mut Macros, u8),
+        for (name, hint, get, set) in [
+            (
+                tr.t("速度", "Speed"),
+                tr.t(
+                    "50 为档位原值；0 慢一半，100 快一倍。",
+                    "50 is the profile as is; 0 is half as fast, 100 twice as fast.",
                 ),
-                (
-                    tr.t("准确度", "Accuracy"),
-                    tr.t(
-                        "越高错误越少：0 是 4 倍，100 是四分之一。",
-                        "Higher means fewer mistakes: 0 is 4×, 100 a quarter.",
-                    ),
-                    |m: &Macros| m.accuracy,
-                    |m: &mut Macros, v| m.accuracy = v,
+                (|m: &Macros| m.speed) as fn(&Macros) -> u8,
+                (|m: &mut Macros, v| m.speed = v) as fn(&mut Macros, u8),
+            ),
+            (
+                tr.t("准确度", "Accuracy"),
+                tr.t(
+                    "越高错误越少：0 是 4 倍，100 是四分之一。",
+                    "Higher means fewer mistakes: 0 is 4×, 100 a quarter.",
                 ),
-                (
-                    tr.t("稳定度", "Steadiness"),
-                    tr.t(
-                        "越高节奏越稳，长停顿和疲劳越少。",
-                        "Higher is a steadier rhythm with fewer long stops and less fatigue.",
-                    ),
-                    |m: &Macros| m.stability,
-                    |m: &mut Macros, v| m.stability = v,
+                |m: &Macros| m.accuracy,
+                |m: &mut Macros, v| m.accuracy = v,
+            ),
+            (
+                tr.t("稳定度", "Steadiness"),
+                tr.t(
+                    "越高节奏越稳，长停顿和疲劳越少。",
+                    "Higher is a steadier rhythm with fewer long stops and less fatigue.",
                 ),
-            ] {
-                let row = hbox(10);
-                let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 1.0);
-                scale.set_draw_value(false);
-                scale.set_size_request(150, -1);
-                scale.set_value(f64::from(get(&c.macros)));
-                let readout = label(&format!("{:03}", get(&c.macros)), &["field", "ink"]);
-                {
-                    let app = Rc::clone(self);
-                    let readout = readout.clone();
-                    scale.connect_value_changed(move |s| {
-                        let v = s.value().round() as u8;
-                        readout.set_label(&format!("{v:03}"));
-                        app.update_config(|c| set(&mut c.macros, v));
-                    });
-                }
-                row.append(&scale);
-                row.append(&readout);
-                profile.append(&setting_row(&name, &hint, &row));
+                |m: &Macros| m.stability,
+                |m: &mut Macros, v| m.stability = v,
+            ),
+        ] {
+            let row = hbox(10);
+            let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 1.0);
+            scale.set_draw_value(false);
+            scale.set_size_request(150, -1);
+            scale.set_value(f64::from(get(&c.macros)));
+            let readout = label(&format!("{:03}", get(&c.macros)), &["field", "ink"]);
+            {
+                let app = Rc::clone(self);
+                let readout = readout.clone();
+                scale.connect_value_changed(move |s| {
+                    let v = s.value().round() as u8;
+                    readout.set_label(&format!("{v:03}"));
+                    app.update_config(|c| set(&mut c.macros, v));
+                });
             }
+            row.append(&scale);
+            row.append(&readout);
+            profile.append(&setting_row(&name, &hint, &row));
         }
         let fields = label("", &["field"]);
         fields.set_margin_top(10);
@@ -1482,34 +1452,6 @@ impl App {
         let page = vbox(20);
         page.add_css_class("page");
         let c = self.config.borrow().clone();
-
-        if c.model == ModelKind::Classic {
-            page.append(&page_head(
-                &tr.t("参数", "Tuning"),
-                "Tuning",
-                &tr.t(
-                    "原版模型的八个数值，与 Windows 版含义相同。",
-                    "The original model's eight values, as in the Windows build.",
-                ),
-            ));
-            let panel = panel();
-            panel.append(&panel_head(&pair("Original model", &tr.t("原版模型", "Original model")), None));
-            for p in params::CLASSIC {
-                let spin = gtk::SpinButton::with_range(0.0, f64::from(p.max), 1.0);
-                spin.set_value(f64::from((p.get)(&c.classic)));
-                let app = Rc::clone(self);
-                let set = p.set;
-                spin.connect_value_changed(move |s| {
-                    app.update_config(|c| set(&mut c.classic, s.value() as u32))
-                });
-                let control = hbox(8);
-                control.append(&spin);
-                control.append(&label(p.unit, &["field"]));
-                panel.append(&setting_row(if tr.zh() { p.zh } else { p.en }, "", &control));
-            }
-            page.append(&panel);
-            return page;
-        }
 
         page.append(&page_head(
             &tr.t("参数", "Tuning"),
@@ -2073,36 +2015,15 @@ impl App {
         let ui = self.ui.borrow();
         let Some(ui) = ui.as_ref() else { return };
         let tr = self.tr();
-        let mode = self.config.borrow().typing_mode();
-        ui.profile_fields.set_label(&match mode {
-            TypingMode::Human(m) => {
-                let mistakes =
-                    m.typo_percent + m.omission_percent + m.transpose_percent + m.double_press_percent;
-                if tr.zh() {
-                    format!(
-                        "约 {:.0} WPM  │  每字出错 约 {:.1}%  │  修正 {:.0}%",
-                        m.wpm, mistakes, m.repair_percent
-                    )
-                } else {
-                    format!(
-                        "about {:.0} WPM  │  mistakes about {:.1}% per char  │  fixed {:.0}%",
-                        m.wpm, mistakes, m.repair_percent
-                    )
-                }
-            }
-            TypingMode::Classic(s) => {
-                if tr.zh() {
-                    format!(
-                        "基础延迟 {} ms  │  抖动 {}%  │  修复率 {}%",
-                        s.base_delay_ms, s.jitter_percent, s.repair_rate_percent
-                    )
-                } else {
-                    format!(
-                        "base delay {} ms  │  jitter {}%  │  repair {}%",
-                        s.base_delay_ms, s.jitter_percent, s.repair_rate_percent
-                    )
-                }
-            }
+        let m = self.config.borrow().human_model();
+        let mistakes = m.typo_percent + m.omission_percent + m.transpose_percent + m.double_press_percent;
+        ui.profile_fields.set_label(&if tr.zh() {
+            format!("约 {:.0} WPM  │  每字出错 约 {:.1}%  │  修正 {:.0}%", m.wpm, mistakes, m.repair_percent)
+        } else {
+            format!(
+                "about {:.0} WPM  │  mistakes about {:.1}% per char  │  fixed {:.0}%",
+                m.wpm, mistakes, m.repair_percent
+            )
         });
     }
 
