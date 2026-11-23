@@ -4,6 +4,8 @@
 ///
 /// Percent fields are clamped to `0..=100` where they are used; the planner
 /// never panics on out-of-range values.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypingSettings {
     /// Mean pause between two typed characters, in milliseconds.

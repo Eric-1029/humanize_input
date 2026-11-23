@@ -431,3 +431,58 @@ fn full_repair_classic_session_types_exact_text() {
     assert_eq!(driver.text(), sample);
     assert!(driver.violations().is_empty(), "{:?}", driver.violations());
 }
+
+#[test]
+fn hooks_run_around_typing_and_word_delete_follows_the_target_app() {
+    use std::sync::atomic::AtomicUsize;
+
+    struct Terminal;
+    impl FocusTracker for Terminal {
+        fn current(&self) -> Option<WindowId> {
+            Some(WindowId("t".into()))
+        }
+        fn app_id(&self, _: &WindowId) -> Option<String> {
+            Some("org.kde.konsole".into())
+        }
+    }
+    #[derive(Default)]
+    struct Counter(AtomicUsize, AtomicUsize);
+    impl humanize_core::SessionHooks for Counter {
+        fn typing_started(&self, target: &WindowId) {
+            assert_eq!(target.0, "t");
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+        fn typing_finished(&self, _: &WindowId) {
+            self.1.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// Counts Ctrl presses on top of the editor.
+    #[derive(Clone)]
+    struct CtrlSpy(EditorDriver, Arc<AtomicUsize>);
+    impl Driver for CtrlSpy {
+        fn key(&mut self, key: KeyCode, down: bool) -> Result<(), DriverError> {
+            if down && matches!(key, KeyCode::LEFT_CTRL | KeyCode::RIGHT_CTRL) {
+                self.1.fetch_add(1, Ordering::SeqCst);
+            }
+            self.0.key(key, down)
+        }
+    }
+
+    let log = Log::default();
+    let driver = EditorDriver::new();
+    let ctrl_presses = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::new(Counter::default());
+    let spy = CtrlSpy(driver.clone(), Arc::clone(&ctrl_presses));
+    let s = session(spy, Arc::new(Terminal), &log).with_hooks(counter.clone());
+    let model = HumanModel { word_redo_percent: 100.0, repair_percent: 100.0, ..quick_human() };
+    let text = "type several longer words here";
+    s.start_seeded(text, TypingMode::Human(model), 1).unwrap();
+    wait_for_state(&s, SessionState::Completed);
+
+    assert_eq!(driver.text(), text);
+    // In a terminal, fumbled words are erased with Backspace, never Ctrl.
+    assert_eq!(ctrl_presses.load(Ordering::SeqCst), 0);
+    assert!(driver.violations().is_empty(), "{:?}", driver.violations());
+    assert_eq!((counter.0.load(Ordering::SeqCst), counter.1.load(Ordering::SeqCst)), (1, 1));
+}

@@ -22,6 +22,7 @@ use humanize_core::{
     FocusTracker, HumanModel, LogEvent, Preset, Session, SessionEvent, SessionState, TypingMode,
     TypingSettings, WindowId,
 };
+use humanize_desktop::{Desktop, DesktopOptions};
 use humanize_input::{DeviceIdentity, UinputKeyboard, caps_lock_on};
 
 const SAMPLE: &str = "The Quick brown fox, said HELLO to the lazy dog. Then it left!\n\
@@ -41,6 +42,11 @@ struct Options {
     seed: Option<u64>,
     text: String,
     with_ime: bool,
+    /// Attach the desktop services (KWin focus, fcitx5 switching).
+    desktop: bool,
+    /// Switch fcitx5 to Chinese mode in the test window before typing, to
+    /// prove the session turns it off again (with --desktop). Implies --with-ime.
+    ime_on: bool,
 }
 
 fn parse_args() -> Options {
@@ -48,6 +54,8 @@ fn parse_args() -> Options {
     let mut seed = None;
     let mut text = SAMPLE.to_owned();
     let mut with_ime = false;
+    let mut desktop = false;
+    let mut ime_on = false;
     let mut no_mistakes = false;
     let mut word_redo: Option<f64> = None;
     let mut args = std::env::args().skip(1);
@@ -68,6 +76,11 @@ fn parse_args() -> Options {
             }
             "--seed" => seed = args.next().and_then(|s| s.parse().ok()),
             "--with-ime" => with_ime = true,
+            "--desktop" => desktop = true,
+            "--ime-on" => {
+                ime_on = true;
+                with_ime = true;
+            }
             "--no-mistakes" => no_mistakes = true,
             "--word-redo" => word_redo = args.next().and_then(|s| s.parse().ok()),
             _ => text = arg,
@@ -94,7 +107,7 @@ fn parse_args() -> Options {
     } else if let TypingMode::Classic(s) = &mut mode {
         s.repair_rate_percent = 100;
     }
-    Options { mode, seed, text, with_ime }
+    Options { mode, seed, text, with_ime, desktop, ime_on }
 }
 
 fn main() -> glib::ExitCode {
@@ -123,16 +136,37 @@ fn main() -> glib::ExitCode {
         }
     };
 
+    let desktop = if options.desktop {
+        match Desktop::start(DesktopOptions { tray: None, switch_input_method: true }) {
+            Ok(d) => {
+                for w in d.warnings() {
+                    eprintln!("desktop warning: {w}");
+                }
+                Some(Rc::new(d))
+            }
+            Err(e) => {
+                eprintln!("FAIL: {e}");
+                return glib::ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+
     let active = Arc::new(AtomicBool::new(false));
     let (tx, rx) = mpsc::channel();
-    let session = Rc::new(Session::new(
+    let mut session = Session::new(
         Box::new(keyboard),
         Arc::new(WindowActive(Arc::clone(&active))),
         Arc::new(layout),
         Arc::new(move |e| {
             let _ = tx.send(e);
         }),
-    ));
+    );
+    if let Some(d) = &desktop {
+        session = session.with_hooks(d.session_hooks());
+    }
+    let session = Rc::new(session);
     let rx = Rc::new(rx);
     let passed = Rc::new(Cell::new(false));
     let options = Rc::new(options);
@@ -144,7 +178,7 @@ fn main() -> glib::ExitCode {
     {
         let passed = Rc::clone(&passed);
         app.connect_activate(move |app| {
-            build(app, &active, &session, &rx, &options, &passed);
+            build(app, &active, &session, &rx, &options, &passed, desktop.clone());
         });
     }
     app.run_with_args::<&str>(&[]);
@@ -158,6 +192,7 @@ fn build(
     rx: &Rc<mpsc::Receiver<SessionEvent>>,
     options: &Rc<Options>,
     passed: &Rc<Cell<bool>>,
+    desktop: Option<Rc<Desktop>>,
 ) {
     let view = gtk::TextView::builder().monospace(true).hexpand(true).vexpand(true).build();
     let window = gtk::ApplicationWindow::builder()
@@ -185,6 +220,11 @@ fn build(
             window_for_start.close();
             return;
         }
+        if options.ime_on {
+            let _ = std::process::Command::new("fcitx5-remote").arg("-o").status();
+            std::thread::sleep(Duration::from_millis(200));
+            eprintln!("fcitx5 state before typing: {}", fcitx_state());
+        }
         let started = match options.seed {
             Some(seed) => session.start_seeded(&options.text, options.mode, seed),
             None => session.start(&options.text, options.mode),
@@ -205,6 +245,11 @@ fn build(
                         let buffer = view.buffer();
                         let typed = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
                         eprintln!("\nelapsed: {:.1}s", begun.elapsed().as_secs_f64());
+                        if let Some(d) = &desktop {
+                            let own = d.active_window().is_some_and(|w| w.pid == std::process::id());
+                            eprintln!("KWin sees the test window as active: {own}");
+                            eprintln!("fcitx5 state after typing: {}", fcitx_state());
+                        }
                         if typed == options.text {
                             eprintln!("PASS: {} chars arrived exactly", typed.chars().count());
                             passed.set(true);
@@ -239,4 +284,12 @@ fn build(
             glib::ControlFlow::Continue
         });
     });
+}
+
+/// fcitx5's state for the focused window: 0 closed, 1 direct, 2 active.
+fn fcitx_state() -> String {
+    std::process::Command::new("fcitx5-remote")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .unwrap_or_else(|_| "n/a".into())
 }

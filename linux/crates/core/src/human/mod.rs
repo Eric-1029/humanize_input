@@ -196,12 +196,15 @@ impl HumanPlanner {
             self.press(wrong.unwrap_or(stroke), false);
         }
         self.think(self.model.notice_delay_ms);
-        let has_ctrl = self.layout.modifier_keys().ctrl.is_some();
-        match self.model.word_delete {
-            WordDelete::CtrlBackspace if has_ctrl => {
-                self.press(Stroke::new(KeyCode::BACKSPACE, Mods::CTRL), true);
-            }
-            _ => self.backspaces(typed),
+        let ctrl_backspace = match self.model.word_delete {
+            // Unresolved Auto: no target known (dry runs, tests).
+            WordDelete::Auto | WordDelete::CtrlBackspace => self.layout.modifier_keys().ctrl.is_some(),
+            WordDelete::Backspaces => false,
+        };
+        if ctrl_backspace {
+            self.press(Stroke::new(KeyCode::BACKSPACE, Mods::CTRL), true);
+        } else {
+            self.backspaces(typed);
         }
         self.think(REDO_RESTART_MS);
         self.progress.word_redo_count += 1;

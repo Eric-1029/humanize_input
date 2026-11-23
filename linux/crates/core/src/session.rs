@@ -56,6 +56,20 @@ pub trait FocusTracker: Send + Sync {
     /// The focused window, or `None` if it cannot be determined right now.
     /// Called before every key press, so it must be cheap.
     fn current(&self) -> Option<WindowId>;
+
+    /// Application id of `window` (Wayland app id / X11 class), if known.
+    /// Used to adapt behaviour to the target, e.g. word deletion in terminals.
+    fn app_id(&self, _window: &WindowId) -> Option<String> {
+        None
+    }
+}
+
+/// Callbacks around the typing phase, run on the worker thread.
+pub trait SessionHooks: Send + Sync {
+    /// The target window was captured and typing is about to begin.
+    fn typing_started(&self, _target: &WindowId) {}
+    /// Typing ended (completed, cancelled or failed) and all keys are up.
+    fn typing_finished(&self, _target: &WindowId) {}
 }
 
 /// For desktops without focus detection: the target is always focused.
@@ -155,6 +169,9 @@ pub type EventSink = Arc<dyn Fn(SessionEvent) + Send + Sync>;
 
 type ActionStream = Box<dyn Iterator<Item = KeyAction> + Send>;
 
+/// Builds the action stream once the target's app id is known.
+type PlanFactory = Box<dyn FnOnce(Option<&str>) -> ActionStream + Send>;
+
 struct Control {
     state: SessionState,
     /// True from `start` until the worker thread has exited.
@@ -168,6 +185,7 @@ struct Shared {
     wake: Condvar,
     sink: EventSink,
     focus: Arc<dyn FocusTracker>,
+    hooks: Option<Arc<dyn SessionHooks>>,
 }
 
 /// Marker for "the session was canceled; unwind".
@@ -419,12 +437,24 @@ impl Session {
         let control =
             Control { state: SessionState::Idle, worker_active: false, cancel: false, user_paused: false };
         Self {
-            shared: Arc::new(Shared { control: Mutex::new(control), wake: Condvar::new(), sink, focus }),
+            shared: Arc::new(Shared {
+                control: Mutex::new(control),
+                wake: Condvar::new(),
+                sink,
+                focus,
+                hooks: None,
+            }),
             driver: Arc::new(Mutex::new(driver)),
             classic_geometry: Arc::new(layout.classic_geometry()),
             layout,
             worker: Mutex::new(None),
         }
+    }
+
+    /// Installs callbacks around typing. Call before the first start.
+    pub fn with_hooks(mut self, hooks: Arc<dyn SessionHooks>) -> Self {
+        Arc::get_mut(&mut self.shared).expect("with_hooks before any session started").hooks = Some(hooks);
+        self
     }
 
     pub fn state(&self) -> SessionState {
@@ -445,22 +475,28 @@ impl Session {
         self.start_with(text, mode, Some(seed))
     }
 
-    fn actions(&self, text: &str, mode: TypingMode, seed: Option<u64>) -> ActionStream {
+    fn plan_factory(&self, text: &str, mode: TypingMode, seed: Option<u64>) -> PlanFactory {
         let layout = Arc::clone(&self.layout);
-        match mode {
-            TypingMode::Classic(settings) => {
-                let geometry = Arc::clone(&self.classic_geometry);
-                let planner = match seed {
-                    Some(seed) => Planner::with_seed(text, settings, geometry, seed),
-                    None => Planner::new(text, settings, geometry),
-                };
-                Box::new(ClassicKeys::new(planner, layout))
+        let geometry = Arc::clone(&self.classic_geometry);
+        let text = text.to_owned();
+        Box::new(move |app_id: Option<&str>| -> ActionStream {
+            match mode {
+                TypingMode::Classic(settings) => {
+                    let planner = match seed {
+                        Some(seed) => Planner::with_seed(&text, settings, geometry, seed),
+                        None => Planner::new(&text, settings, geometry),
+                    };
+                    Box::new(ClassicKeys::new(planner, layout))
+                }
+                TypingMode::Human(mut model) => {
+                    model.word_delete = model.word_delete.resolve(app_id);
+                    Box::new(match seed {
+                        Some(seed) => HumanPlanner::with_seed(&text, model, layout, seed),
+                        None => HumanPlanner::new(&text, model, layout),
+                    })
+                }
             }
-            TypingMode::Human(model) => Box::new(match seed {
-                Some(seed) => HumanPlanner::with_seed(text, model, layout, seed),
-                None => HumanPlanner::new(text, model, layout),
-            }),
-        }
+        })
     }
 
     fn start_with(&self, text: &str, mode: TypingMode, seed: Option<u64>) -> Result<(), StartError> {
@@ -484,13 +520,13 @@ impl Session {
         }
         self.shared.emit(SessionEvent::State(SessionState::Arming));
 
-        let actions = self.actions(text, mode, seed);
+        let plan = self.plan_factory(text, mode, seed);
         let shared = Arc::clone(&self.shared);
         let driver = Arc::clone(&self.driver);
         let lead_in = mode.lead_in();
         let handle = thread::Builder::new()
             .name("humanize-typing".into())
-            .spawn(move || run_worker(&shared, &driver, actions, lead_in))
+            .spawn(move || run_worker(&shared, &driver, plan, lead_in))
             .expect("spawning the typing thread");
 
         // The previous worker (if any) has already cleared worker_active, so
@@ -576,9 +612,9 @@ impl Drop for Session {
     }
 }
 
-fn run_worker(shared: &Shared, driver: &Mutex<Box<dyn Driver>>, actions: ActionStream, lead_in: Duration) {
+fn run_worker(shared: &Shared, driver: &Mutex<Box<dyn Driver>>, plan: PlanFactory, lead_in: Duration) {
     let mut driver = driver.lock().unwrap_or_else(PoisonError::into_inner);
-    let outcome = type_text(shared, &mut **driver, actions, lead_in);
+    let outcome = type_text(shared, &mut **driver, plan, lead_in);
 
     let final_state = match outcome {
         Ok(true) => SessionState::Completed,
@@ -607,17 +643,25 @@ fn run_worker(shared: &Shared, driver: &Mutex<Box<dyn Driver>>, actions: ActionS
 fn type_text(
     shared: &Shared,
     driver: &mut dyn Driver,
-    actions: ActionStream,
+    plan: PlanFactory,
     lead_in: Duration,
 ) -> Result<bool, Interrupt> {
     shared.sleep(lead_in)?;
     let Some(target) = shared.focus.current() else {
         return Ok(false);
     };
+    let actions = plan(shared.focus.app_id(&target).as_deref());
     shared.set_state(SessionState::Running);
+    if let Some(hooks) = &shared.hooks {
+        hooks.typing_started(&target);
+    }
 
-    let mut executor = Executor { shared, driver, target, down: Vec::new(), restore: Vec::new() };
+    let mut executor =
+        Executor { shared, driver, target: target.clone(), down: Vec::new(), restore: Vec::new() };
     let result = executor.run(actions);
     executor.release_all();
+    if let Some(hooks) = &shared.hooks {
+        hooks.typing_finished(&target);
+    }
     result.map(|()| true)
 }

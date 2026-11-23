@@ -7,6 +7,10 @@ license.workspace = true
 [dependencies]
 rand = "0.10.4"
 rand_chacha = "0.10.0"
+serde = { version = "1.0.229", features = ["derive"], optional = true }
 
 [lints]
 workspace = true
+
+[features]
+serde = ["dep:serde"]

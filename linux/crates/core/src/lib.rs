@@ -30,6 +30,6 @@ pub use plan::{Action, ClassicKeys, Planner};
 pub use progress::TypingProgress;
 pub use session::{
     AlwaysFocused, Driver, DriverError, EventSink, FocusTracker, LogEvent, Session, SessionEvent,
-    SessionState, StartError, TypingMode, WindowId,
+    SessionHooks, SessionState, StartError, TypingMode, WindowId,
 };
 pub use settings::TypingSettings;

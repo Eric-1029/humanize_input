@@ -107,12 +107,26 @@ linux/
 - 整词删除方式按目标窗口自动选择（用户已确认）：目标是终端（konsole、kitty、alacritty、wezterm、foot、xterm 等）时逐个退格，其他程序用 Ctrl+Backspace。
 - 键盘布局应取 KDE 当前激活的那个（通过 DBus `org.kde.keyboard`），而不是配置里的第一个。
 
-## 第四阶段：桌面集成（`crates/desktop`）
+## 第四阶段：桌面集成（`crates/desktop`）✅ 已完成
 
 - GlobalShortcuts 门户（`ashpd`）：开始、暂停 / 继续、取消三个热键；应用里填建议组合，KDE 弹窗确认，界面显示实际生效的组合。
 - KWin 脚本：通过 DBus 加载，把活动窗口的变化回传给应用，实现 `FocusTracker`。
 - 托盘（`ksni`）：打开窗口、开始、暂停、退出；启动后缩到托盘。
 - 配置：TOML 文件，放在 `~/.config/humanize_input/config.toml`，修改后自动保存。
+
+**完成记录**
+- `Desktop` 自带一个 tokio 运行时，所有桌面服务的消息都汇总到一个事件通道里发给界面。任何一项服务启动失败都不会影响其他服务，`warnings()` 会说明缺了什么。
+- **KWin 焦点**：通过 DBus 往 KWin 加载一个 JS 脚本，活动窗口一变就回调我们导出的 DBus 对象，带上窗口 UUID、应用 ID、标题和 pid。程序自己的窗口不算目标，防止往自己界面里打字。程序退出时会卸载脚本（已确认卸载后不再存在）。
+- **fcitx5**：开始打字前，如果目标窗口的输入法处于中文模式，就切到英文；结束后，如果目标还在焦点上，再切回去。实测把测试窗口强制切到中文后，不切换时 "hello world" 变成了 "合理咯"；切换后完全正确。
+- **键盘布局**：通过 DBus `org.kde.keyboard` 读取当前激活的布局并监听切换；model 和 options 取自 kxkbrc。
+- **热键**：用 GlobalShortcuts 门户绑定三个热键；也能打开 KDE 的快捷键设置（门户 v2）。实测用虚拟键盘按下 Ctrl+Alt+S/P/Q，三个事件都完整收到。
+- **托盘**：用 ksni 实现 StatusNotifierItem，菜单文字由界面传入；忙碌时换图标。
+- **core 的配套改动**：新增 `WordDelete::Auto`（默认），在捕获目标后按应用 ID 决定删词方式，终端逐个退格，其他程序用 Ctrl+Backspace；新增 `SessionHooks`；`FocusTracker::app_id`；参数类型加了可选 serde 支持。
+- **配置**：TOML 格式，原子写入；字段缺失或无法识别时用默认值。
+- 测试：core 45 + 13 个，desktop 5 个；`tools/e2e` 新增 `--desktop` / `--ime-on` 选项和 `hotkey_check`。
+
+**发现的问题，交给第五阶段**
+- 从终端启动时，门户会根据进程所在的 systemd scope 把我们认成终端或 VS Code，热键也会记在那个应用名下（测试时出现过，已清理）。第五阶段启动时检测 cgroup，scope 不对就用 `systemd-run --user --scope --unit=app-dev.humanize_input.HumanizeInput-<pid>.scope` 重新启动自己；第六阶段再提供 .desktop 文件。
 
 ## 第五阶段：界面（`app/`）
 
