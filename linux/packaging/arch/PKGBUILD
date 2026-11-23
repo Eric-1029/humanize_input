@@ -1,11 +1,11 @@
 # Maintainer: Eric-1029
 pkgname=humanize-input
-pkgver=0.2.0
-pkgrel=2
+pkgver=1.0.0
+pkgrel=1
 pkgdesc="Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Eric-1029/humanize_input"
-license=('MIT' 'OFL-1.1')
+license=('Apache-2.0' 'OFL-1.1')
 depends=('gtk4' 'libxkbcommon' 'fontconfig' 'systemd')
 optdepends=('fcitx5: switched to direct input automatically while typing'
             'plasma-workspace: focus detection, layout tracking and global hotkeys')
@@ -48,6 +48,8 @@ package() {
   install -Dm644 packaging/humanize-input.modules-load.conf \
     "$pkgdir/usr/lib/modules-load.d/humanize-input.conf"
   install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 ../NOTICE "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
   install -Dm644 assets/fonts/Saira-OFL.txt "$pkgdir/usr/share/licenses/$pkgname/Saira-OFL.txt"
-  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 ../README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 ../README.zh-CN.md "$pkgdir/usr/share/doc/$pkgname/README.zh-CN.md"
 }

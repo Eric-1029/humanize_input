@@ -1,85 +1,149 @@
 # humanize_input
 
-Windows 原生逐字输入模拟工具（C# + WPF）。
+通过一块虚拟 USB 键盘，像人一样把文字打进任意窗口：有节奏、会停顿、会打错再改。这是用 Rust 和 GTK4 编写的 Linux 原生应用，主要面向 KDE Plasma（Wayland 或 X11）。
 
-English version: [README.md](README.md)
+English: [README.md](README.md) · Windows 版：[WINDOWS.zh-CN.md](WINDOWS.zh-CN.md)
 
-Linux 用户请看 [linux/](linux/README.zh-CN.md)：基于 Rust + GTK4 的原生版本，面向 KDE Plasma。
+![输入页](linux/docs/screenshots/typing-light.png)
 
-## 已实现功能
+## 功能
 
-- 粘贴文本后逐字输入
-- 输入速度与抖动调节
-- 错字/漏写/相邻字符颠倒概率模拟
-- 邻键错字（基于键盘邻近位置，距离越近概率越高）
-- 修复率调节（错误不一定都会被修复）
-- 延迟修复模拟（部分情况下会先继续输入 1-2 个字符再回看修复）
-- 数字字符不参与错字模拟
-- CJK 字符输入（Unicode 路径）与常见 ASCII 键盘路径的混合注入
-- 全局热键开始、暂停/继续（支持修改）
-- 程序启动后自动最小化到托盘，双击托盘图标恢复窗口
-- 焦点窗口变更时自动等待，焦点恢复后继续输入
-- 半透明主窗口，自适应参数卡片，窄窗口下通过换行和滚动保持可读性
-- 九个滑块右侧均可直接修改数字，下方显示允许范围
-- 文/A 双语界面切换（中英），设置项与介绍文案均可翻译
-- 输入频率检测器：录入样本并拟合模拟参数
-- 设置自动持久化到 INI 文件
-- 启动自动加载、修改后自动保存
-- 首次启动自动生成默认 `settings.ini`
+- **硬件级按键**：通过 uinput 创建一块虚拟 USB 键盘，系统看到的是一块普通键盘：BUS_USB、可配置的设备名和 VID/PID、105 键、HID 扫描码、三个锁定灯。按键按 USB 轮询率（默认 1000 Hz）成组发出，组内顺序和真实键盘一致。
+- **按当前键盘布局打字**：读取 KDE 当前使用的布局（US、德语、法语、Dvorak 等），算出每个字符该按哪个键、要不要 Shift 或 AltGr。在 KDE 里切换布局后自动跟着换。
+- **拟人打字模型**：
+  - 按键：每个键按住多久各不相同；快打时前一个键还没抬起，下一个已经按下；Shift 用另一只手按。
+  - 节奏：按手指和字母组合调整间隔；句末、段落和偶尔会有长时间停顿；越打越累。
+  - 错误：错字、漏字、颠倒、多按一次、大小写失误、整词打乱后删掉重打。按修正率决定改不改，有时多打一两个字才发现。
+  - 档位与滑块：四档预设（生疏、普通、熟练、打字员），加上速度、准确度、稳定度三个滑块。全部 28 项数值可以在"参数"页调整，并导出或导入为 TOML。
+- **打字测试**：照着一段样本打一遍，程序从你的按键里测出速度、节奏起伏、按住时长、Shift 提前量、各种停顿、错误率、修正习惯等参数，标出每项是否可信，确认后再应用。
+- **不打错地方**：
+  - 倒计时结束时，把位于前台的窗口记为目标；目标失去焦点时自动暂停，回来后继续（依靠 KWin）。
+  - 暂停、失焦、取消或出错时，所有按着的键都会抬起，不会卡住 Shift。
+  - 如果 fcitx5 处于中文模式，打字前自动切到英文，结束后切回。
+  - 大写锁定打开时拒绝开始，避免字母大小写全部反过来。
+- **全局热键**（XDG GlobalShortcuts 门户）：开始 `Ctrl+Alt+S`、暂停/继续 `Ctrl+Alt+P`、取消 `Ctrl+Alt+Q`。
+- 托盘图标，中英双语界面，浅色和深色主题（默认跟随系统），窗口变窄时自动改成单列，设置自动保存。
 
-## 项目结构
+## 限制
 
-- src/HumanizeInput.App: WPF 界面与 ViewModel
-- src/HumanizeInput.Core: 输入会话与随机化逻辑
-- src/HumanizeInput.Infra: Windows SendInput 注入实现
-- tests/HumanizeInput.Core.Tests: 核心单元测试
+- **目前只支持 ASCII**：英文字母、数字、键盘上的符号、换行和 Tab。其他字符（中文、全角标点、é 等）会在原文里标出，必须删掉或替换后才能开始。
+- **焦点检测和热键需要 KDE Plasma**。在其他桌面上程序也能打字，但不会在失焦时自动暂停，也可能没有全局热键。
+- **焦点检测有几毫秒延迟**：KWin 通过 DBus 回报焦点变化，如果打字时焦点被突然抢走（比如弹出通知），可能有几个键落到别的窗口。
+- **死键**：死键上的字符（例如德语布局的 `^`、`` ` ``）不支持。
+- **终端里的删词**：大多数终端把 Ctrl+Backspace 当作普通退格，所以整词删除方式默认是"自动"：终端里逐个退格，其他程序用 Ctrl+Backspace。
 
-## 运行前提
+## 安装
 
-请先安装 .NET 8 SDK 与 Windows Desktop Runtime。
+### Arch / CachyOS
 
-## 直接运行 Release
+从 [Releases](https://github.com/Eric-1029/humanize_input/releases) 下载 `humanize-input-<版本号>-x86_64.pkg.tar.zst`，然后安装：
 
-如果你下载的是 release 的 ZIP 包，例如 `dist/humanize_input-v1.1.5-win-x64.zip`，解压后直接双击 `HumanizeInput.App.exe` 即可启动，不需要先编译。启动后程序会自动最小化到托盘；如果你只看到托盘图标或小窗，这是正常现象，说明程序已经启动。需要时双击托盘图标可恢复主窗口。
-
-## 构建与运行
-
-```powershell
-dotnet build .\humanize_input.sln
-dotnet run --project .\src\HumanizeInput.App\HumanizeInput.App.csproj
+```sh
+sudo pacman -U humanize-input-*-x86_64.pkg.tar.zst
 ```
 
-## 使用流程
+也可以用 PKGBUILD 从最新的发布标签自己构建：
 
-1. 在文本框粘贴内容
-2. 调整输入参数（速度、抖动、错字率、漏写率、颠倒率、修复率）
+```sh
+cd linux/packaging/arch
+makepkg -si
+```
 
-   参数分为输入节奏、错误模拟和修正行为。可拖动滑块或直接编辑右侧数字：回车或移开焦点提交，Esc 恢复原值；越界整数自动限制到允许范围，空白或非法输入恢复原值。窗口变窄时卡片自动换行，内容可滚动，文字不会整体缩小；底部始终保留开始、暂停/继续和取消按钮。
-3. 配置并应用全局热键（默认开始 `Ctrl+Alt+S`，暂停/继续 `Ctrl+Alt+P`）
-4. 如果想根据真实输入样本拟合参数，可在设置面板里打开输入检测器
-5. 程序会自动最小化到托盘，双击托盘图标可恢复窗口
-6. 先把目标编辑器光标放在可输入区域，再按开始热键
-7. 输入过程中按暂停热键可暂停/继续
+安装包会同时装上 udev 规则（允许当前登录用户使用 `/dev/uinput`）、开机加载 `uinput` 模块的配置，以及应用的 .desktop 文件。装好后在应用菜单里搜 humanize_input 或"拟人输入"打开，也可以在终端运行 `humanize_input`。第一次安装后如果提示没有 `/dev/uinput` 权限，注销后重新登录即可。
 
-## 配置文件（INI）
+### 预编译版本（任意发行版，x86_64）
 
-- 默认位置：与程序可执行文件同目录（`settings.ini`）。
-- 首次启动会自动写入默认配置。
-- 用户调整设置项后会自动保存。
-- 下次启动会自动从 INI 读取并恢复配置。
-- 语言会通过 `language=zh-CN|en-US` 持久化。
+从 [Releases](https://github.com/Eric-1029/humanize_input/releases) 下载 `humanize_input-linux-v<版本号>-x86_64.tar.gz`，解压后：
 
-## 参数建议（更像人类）
+```sh
+sudo install -Dm644 60-humanize-input-uinput.rules /usr/lib/udev/rules.d/60-humanize-input-uinput.rules
+sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --sysname-match=uinput
+./humanize_input
+```
 
-- 基础延迟: 70-140 ms
-- 抖动: 15%-35%
-- 错字率: 5%-10%
-- 漏写率: 2%-6%
-- 颠倒率: 2%-5%
-- 修复率: 70%-90%
+需要 glibc 2.39+、GTK 4.16+、libxkbcommon 和 fontconfig。想从应用菜单启动，可以把 `humanize_input` 放进 `PATH`（例如 `~/.local/bin`），再把 `dev.humanize_input.HumanizeInput.desktop` 复制到 `~/.local/share/applications/`。
 
-## 注意事项
+### 从源码运行
 
-- 遵守 Windows 输入模型：输入发送到前台焦点窗口。
-- 如果目标应用以管理员权限运行，本程序也应以相同权限运行。
-- 若发生 DLL 被占用导致构建警告/失败，先关闭正在运行的 humanize_input 再构建。
+需要 Rust 1.88 以上，以及 GTK 4.16+、libxkbcommon、fontconfig 的开发包。
+
+```sh
+cd linux
+cargo build --release -p humanize-input-app
+./target/release/humanize_input
+```
+
+先确认当前用户能写 `/dev/uinput`：`ls -l /dev/uinput` 的权限末尾应该有 `+`，表示有 ACL。如果没有，安装 udev 规则并重新加载：
+
+```sh
+sudo install -Dm644 packaging/60-humanize-input-uinput.rules /usr/lib/udev/rules.d/
+sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --sysname-match=uinput
+```
+
+从源码运行时，程序会在 `~/.local/share/applications/` 写一份隐藏的 .desktop 文件（桌面门户要靠它识别应用，否则不给注册热键），并用 `systemd-run --scope` 把自己放进专属的 systemd scope。
+
+## 使用
+
+1. 把文字粘贴进"原文"框，或用 `humanize_input --text 文件` 启动时直接读入。
+2. 选一个档位，按需要拖动速度、准确度、稳定度滑块。原文上方会显示预计用时。
+3. 点"开始输入"或按 `Ctrl+Alt+S`，然后在倒计时（默认 2.5 秒）内切换到要输入的窗口，并把光标放在输入位置。
+4. 输入过程中按 `Ctrl+Alt+P` 暂停或继续，按 `Ctrl+Alt+Q` 取消。原文里已打的部分恢复正常颜色，黄色光标标出当前位置。
+
+第一次启动时，KDE 会请你确认这三个热键。之后可以在"输入"页点"修改"，或者到 系统设置 → 键盘 → 快捷键 里改。
+
+关闭窗口只会把它收到托盘；退出请用托盘菜单里的"退出"。
+
+### 用打字测试校准
+
+打开"测试"页，选一段样本（或用"原文"里的文字），在下面的框里照着打一遍，打错了像平时一样改。打完最后一个字会自动分析，也可以随时点"结束并分析"。结果页列出每一项的当前值、测得值和样本数：样本足够的标为"可信"，点"应用"后写入"参数"页的自定义值，速度、准确度、稳定度三个滑块归位到 50；样本不足的项保留当前值。测试时程序会把自己窗口的输入法切到英文。
+
+![测试页](linux/docs/screenshots/test-light.png)
+
+## 配置
+
+配置保存在 `~/.config/humanize_input/config.toml`，修改后自动保存；缺失或无法识别的字段会用默认值。主要字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `language` | `zh-CN` / `en-US` |
+| `theme` | `system` / `light` / `dark` |
+| `preset`、`[macros]` | 档位和三个滑块（`speed`、`accuracy`、`stability`，50 为档位原值） |
+| `[advanced]` | "参数"页里的自定义数值；存在时取代档位，三个滑块在它的基础上再调整 |
+| `word_delete` | `auto` / `ctrl_backspace` / `backspaces` |
+| `lead_in_ms` | 开始前倒计时 |
+| `[hotkeys]` | 申请热键时建议的组合（实际以 KDE 中的设置为准） |
+| `[device]` | 虚拟键盘的 `name`、`vendor`、`product`、`version`、`polling_hz`（下次启动生效） |
+| `start_minimized`、`switch_input_method` | 启动后收到托盘、自动切换输入法 |
+
+0.x 版本的配置文件可以直接使用。其中的 `model` 和 `[classic]` 属于 1.0 已移除的原版模型，会被忽略。
+
+## 开发
+
+```
+linux/
+  crates/core      打字模型、会话状态机、虚拟编辑器（测试用）
+  crates/keymap    用 xkbcommon 把字符反查成按键
+  crates/input     uinput 虚拟 USB 键盘、只记录的演练驱动
+  crates/desktop   KWin 焦点、fcitx5、KDE 布局、门户热键、托盘、配置
+  app/             GTK4 界面
+  tools/e2e        实机测试工具（会真的在桌面上打字）
+  packaging/       .desktop 文件、udev 规则、PKGBUILD
+  docs/PLAN.md     分阶段计划和每个阶段的完成记录
+src/、tests/       Windows 版（C# / WPF），见 WINDOWS.zh-CN.md
+```
+
+以下命令在 `linux/` 目录里运行：
+
+```sh
+cargo test --workspace                                        # 不碰系统的全部测试
+cargo test -p humanize-input --test device -- --ignored       # 创建一块真实虚拟设备（不发按键）
+cargo run -p humanize-core --example plan -- average "Hi!"   # 打印按键时间线，不发任何按键
+cargo run -p humanize-e2e                                     # 在自己的窗口里实打并比对
+cargo run -p humanize-e2e --bin detector_check               # 用已知参数往测试页实打，核对测出的值
+```
+
+界面开发用的选项：`--offline`（不启动桌面服务和虚拟键盘）、`--demo`（往只记录不发送的驱动里打字）、`--screenshot FILE.png`、`--size WxH`、`--theme`、`--lang`、`--page`。设置环境变量 `HUMANIZE_INPUT_TRACE=FILE` 会记录发出的每个按键事件，可以用 `cargo run -p humanize-e2e --bin replay -- FILE` 回放。
+
+## 许可
+
+Apache License 2.0，见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。界面字体 Saira 使用 SIL Open Font License 1.1，见 [linux/assets/fonts/Saira-OFL.txt](linux/assets/fonts/Saira-OFL.txt)。

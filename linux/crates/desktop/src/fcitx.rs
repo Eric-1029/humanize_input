@@ -71,8 +71,10 @@ impl ImeGuard {
                 proxy.activate().await.ok()
             }
         };
-        let quick = tokio::time::timeout(UI_TIMEOUT, attempt);
-        self.runtime.block_on(quick).ok().flatten().is_some() && direct
+        // The timer must be created inside the runtime: this runs on the GTK
+        // thread, which has no tokio context of its own.
+        let quick = async { tokio::time::timeout(UI_TIMEOUT, attempt).await.ok().flatten() };
+        self.runtime.block_on(quick).is_some() && direct
     }
 
     pub fn set_enabled(&self, enabled: bool) {
@@ -109,5 +111,38 @@ impl SessionHooks for ImeGuard {
         if restore && self.focus.current().as_ref() == Some(target) {
             let _ = self.call(async |p| p.activate().await);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::net::UnixStream;
+
+    use humanize_core::AlwaysFocused;
+
+    use super::*;
+
+    /// The GTK thread has no tokio context; switching from it used to panic
+    /// ("no reactor running") and abort the app when the Test page opened.
+    #[test]
+    fn switching_from_a_thread_without_tokio_context() {
+        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let (a, b) = UnixStream::pair().unwrap();
+        // A peer with no fcitx behind it: every call fails or times out.
+        let (client, _peer) = rt
+            .block_on(async {
+                tokio::try_join!(
+                    zbus::connection::Builder::unix_stream(a).p2p().build(),
+                    zbus::connection::Builder::unix_stream(b).server(zbus::Guid::generate()).p2p().build(),
+                )
+            })
+            .unwrap();
+        let (tx, _rx) = async_channel::unbounded();
+        let guard = ImeGuard::new(rt.handle().clone(), client, Arc::new(AlwaysFocused), true, tx);
+
+        let started = std::time::Instant::now();
+        assert!(!guard.switch_focused(true));
+        assert!(!guard.switch_focused(false));
+        assert!(started.elapsed() < UI_TIMEOUT * 4);
     }
 }

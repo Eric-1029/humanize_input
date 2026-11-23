@@ -9,7 +9,6 @@ use gtk::glib;
 use gtk::prelude::*;
 use humanize_core::fit::SAMPLES;
 use humanize_core::{FitReport, KeyCode, Macros, SampleEvent, fit};
-use humanize_desktop::config::ModelKind;
 
 use super::{App, Page};
 use crate::i18n::{clock, count};
@@ -490,7 +489,6 @@ impl App {
         self.update_config(|c| {
             c.advanced = Some(report.model);
             c.macros = Macros::default();
-            c.model = ModelKind::Human;
         });
         let tr = self.tr();
         self.add_log(&if tr.zh() {

@@ -98,7 +98,7 @@ impl UinputDevice {
             .open("/dev/uinput")
             .map_err(|e| {
                 let hint = if e.kind() == io::ErrorKind::PermissionDenied {
-                    " (no write access to /dev/uinput; see linux/README.md for the udev rule)"
+                    " (no write access to /dev/uinput; see the README for the udev rule)"
                 } else {
                     ""
                 };

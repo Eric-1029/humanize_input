@@ -3,7 +3,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use humanize_core::{HumanModel, Macros, Preset, TypingMode, TypingSettings, WordDelete};
+use humanize_core::{HumanModel, Macros, Preset, TypingMode, WordDelete};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -23,15 +23,6 @@ pub enum Theme {
     System,
     Light,
     Dark,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ModelKind {
-    #[default]
-    Human,
-    /// The original Windows model.
-    Classic,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,13 +68,11 @@ impl Default for Device {
 pub struct Config {
     pub language: Language,
     pub theme: Theme,
-    pub model: ModelKind,
     pub preset: Preset,
     pub macros: Macros,
     /// Full parameter set edited in the advanced panel; replaces the preset
     /// as the base the sliders apply to.
     pub advanced: Option<HumanModel>,
-    pub classic: TypingSettings,
     pub word_delete: WordDelete,
     pub lead_in_ms: u32,
     pub hotkeys: Hotkeys,
@@ -98,11 +87,9 @@ impl Default for Config {
         Self {
             language: Language::default(),
             theme: Theme::default(),
-            model: ModelKind::default(),
             preset: Preset::Average,
             macros: Macros::default(),
             advanced: None,
-            classic: TypingSettings::default(),
             word_delete: WordDelete::Auto,
             lead_in_ms: 2500,
             hotkeys: Hotkeys::default(),
@@ -125,7 +112,8 @@ impl Config {
     /// Loads `path`; a missing file gives the defaults, and missing or
     /// unknown fields are filled in / ignored. A value of the wrong type or
     /// out of range is an error: callers should then avoid saving over the
-    /// file, so the user can fix it.
+    /// file, so the user can fix it. (`model` and `[classic]` from 0.x
+    /// files, the removed Original model, are among the ignored fields.)
     pub fn load(path: &Path) -> io::Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(text) => {
@@ -158,12 +146,7 @@ impl Config {
     }
 
     pub fn typing_mode(&self) -> TypingMode {
-        match self.model {
-            ModelKind::Human => TypingMode::Human(self.human_model()),
-            ModelKind::Classic => {
-                TypingMode::Classic(TypingSettings { lead_in_delay_ms: self.lead_in_ms, ..self.classic })
-            }
-        }
+        TypingMode::Human(self.human_model())
     }
 }
 
@@ -218,9 +201,19 @@ mod tests {
         assert_eq!(model.lead_in_ms, 1000);
         assert!((model.wpm - Preset::Average.model().wpm * 2.0).abs() < 1e-9);
         assert_eq!(model.word_delete, WordDelete::Auto);
+    }
 
-        let classic = Config { model: ModelKind::Classic, ..config };
-        assert!(matches!(classic.typing_mode(), TypingMode::Classic(s) if s.lead_in_delay_ms == 1000));
+    #[test]
+    fn files_from_0x_with_the_original_model_load_as_human() {
+        let path = temp_path("classic");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let old =
+            "model = \"classic\"\nlead_in_ms = 1500\n[classic]\nbase_delay_ms = 90\njitter_percent = 20\n";
+        std::fs::write(&path, old).unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config, Config { lead_in_ms: 1500, ..Config::default() });
+        assert!(matches!(config.typing_mode(), TypingMode::Human(_)));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
