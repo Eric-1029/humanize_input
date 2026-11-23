@@ -160,7 +160,11 @@ linux/
 - **实机验证（真实应用）**：启动后热键注册到 `dev.humanize_input.HumanizeInput` 名下（用户在 KDE 弹窗里确认过）；用虚拟键盘按 Ctrl+Alt+S 开始输入，KWin 捕获 Konsole 为目标，文字通过 `cat > 文件` 写入文件，和原文逐字一致。按键记录里有 24 次退格、0 次 Ctrl，说明终端里自动改用了逐个退格。另有一轮实测中，Konsole 收到的内容和按键记录回放的结果完全一致，说明按键传递是可靠的。
 - 已知限制：KWin 通过 DBus 回报焦点变化有几毫秒延迟，这段时间里如果焦点被抢走（比如弹出通知），可能有几个键落到别的窗口。第一轮实测出现过一次少了 4 个字符的情况，原因推测如此，未能复现。
 
-## 第六阶段：收尾
+## 第六阶段：收尾 ✅ 已完成
 
 - `linux/README.md`：构建、uinput 权限、热键授权、已知限制。
 - 打包：PKGBUILD（CachyOS / Arch）。
+
+**完成记录**
+- `README.md` / `README.zh-CN.md`：功能、限制、安装（包、源码、uinput 权限）、使用、配置字段、开发与测试。仓库根目录的两份 README 加了 Linux 版的入口。
+- `packaging/`：`dev.humanize_input.HumanizeInput.desktop`（已通过 desktop-file-validate）、udev 规则（让当前会话的用户能写 `/dev/uinput`）、开机加载 `uinput` 的配置、`arch/PKGBUILD` 和安装脚本。

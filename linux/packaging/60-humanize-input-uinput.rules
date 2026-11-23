@@ -1,0 +1,3 @@
+# Let the user at the active seat create virtual input devices, so
+# humanize_input can add its virtual keyboard without root.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

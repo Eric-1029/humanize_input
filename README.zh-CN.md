@@ -4,6 +4,8 @@ Windows 原生逐字输入模拟工具（C# + WPF）。
 
 English version: [README.md](README.md)
 
+Linux 用户请看 [linux/](linux/README.zh-CN.md)：基于 Rust + GTK4 的原生版本，面向 KDE Plasma。
+
 ## 已实现功能
 
 - 粘贴文本后逐字输入

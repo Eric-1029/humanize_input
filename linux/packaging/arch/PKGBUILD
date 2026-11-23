@@ -1,0 +1,56 @@
+# Maintainer: Eric-1029
+pkgname=humanize-input-git
+pkgver=r0
+pkgrel=1
+pkgdesc="Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Eric-1029/humanize_input"
+license=('MIT' 'OFL-1.1')
+depends=('gtk4' 'libxkbcommon' 'fontconfig' 'systemd')
+optdepends=('fcitx5: switched to direct input automatically while typing'
+            'plasma-workspace: focus detection, layout tracking and global hotkeys')
+makedepends=('cargo' 'git')
+provides=('humanize-input')
+conflicts=('humanize-input')
+install=humanize-input.install
+source=("humanize_input::git+${url}.git#branch=linux-rust-port")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd humanize_input
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd humanize_input/linux
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd humanize_input/linux
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p humanize-input-app
+}
+
+check() {
+  cd humanize_input/linux
+  export RUSTUP_TOOLCHAIN=stable
+  # Pure logic only; device and desktop tests need a live session.
+  cargo test --frozen --release -p humanize-core -p humanize-keymap -p humanize-input --lib
+}
+
+package() {
+  cd humanize_input/linux
+  install -Dm755 target/release/humanize_input "$pkgdir/usr/bin/humanize_input"
+  install -Dm644 packaging/dev.humanize_input.HumanizeInput.desktop \
+    "$pkgdir/usr/share/applications/dev.humanize_input.HumanizeInput.desktop"
+  install -Dm644 packaging/60-humanize-input-uinput.rules \
+    "$pkgdir/usr/lib/udev/rules.d/60-humanize-input-uinput.rules"
+  install -Dm644 packaging/humanize-input.modules-load.conf \
+    "$pkgdir/usr/lib/modules-load.d/humanize-input.conf"
+  install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 assets/fonts/Saira-OFL.txt "$pkgdir/usr/share/licenses/$pkgname/Saira-OFL.txt"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
