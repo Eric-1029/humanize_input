@@ -371,15 +371,6 @@ impl App {
         self.bind_hotkeys();
         self.refresh_all();
 
-        // Follow the window width (cheap: acts only when a breakpoint is crossed).
-        {
-            let app = Rc::clone(self);
-            self.window.add_tick_callback(move |w, _| {
-                app.apply_width(w.width());
-                glib::ControlFlow::Continue
-            });
-        }
-
         // Once a second while typing: elapsed and remaining time.
         {
             let app = Rc::clone(self);
@@ -937,7 +928,10 @@ impl App {
         root.add_css_class("ground");
         root.append(&stack);
         stack.set_vexpand(true);
-        self.window.set_child(Some(&root));
+        // Follow the window width; acts only when a breakpoint is crossed.
+        let app = Rc::clone(self);
+        let watch = crate::size_watch::SizeWatch::new(&root, move |width| app.apply_width(width));
+        self.window.set_child(Some(&watch));
         *self.ui.borrow_mut() = Some(ui);
         self.show_page_now(self.page.get());
         if let Some(width) = Some(self.window.width()).filter(|w| *w > 0) {
@@ -1079,6 +1073,11 @@ impl App {
         let seal = label("H", &["seal"]);
         seal.set_xalign(0.5);
         seal.set_valign(gtk::Align::Center);
+        // Brand and navigation may be narrower than their content while the
+        // window shrinks; the brand text hides once the breakpoint applies.
+        let left = hbox(0);
+        let bar_outer = bar;
+        let bar = left.clone();
         bar.append(&CutBin::new(&seal, CUT_SMALL));
         let brand = label("HUMANIZE INPUT", &["brand"]);
         self.responsive.borrow_mut().extras.push(brand.clone().upcast());
@@ -1108,6 +1107,15 @@ impl App {
             nav.push((page, b));
         }
 
+        let left_scroll = gtk::ScrolledWindow::builder()
+            .child(&left)
+            .hscrollbar_policy(gtk::PolicyType::External)
+            .vscrollbar_policy(gtk::PolicyType::Never)
+            .hexpand(true)
+            .propagate_natural_width(true)
+            .build();
+        let bar = bar_outer;
+        bar.append(&left_scroll);
         bar.append(&spacer());
         let layout_readout = label("", &["readout"]);
         layout_readout.set_valign(gtk::Align::Center);
@@ -2174,10 +2182,13 @@ impl humanize_core::Driver for TracingDriver {
     }
 }
 
+/// Vertical scrolling page. Horizontally the content never sets the
+/// window's minimum width (External): the window may shrink first and the
+/// layout then switches to one column.
 fn scrolled(child: &impl IsA<gtk::Widget>) -> gtk::ScrolledWindow {
     gtk::ScrolledWindow::builder()
         .child(child)
-        .hscrollbar_policy(gtk::PolicyType::Never)
+        .hscrollbar_policy(gtk::PolicyType::External)
         .vexpand(true)
         .build()
 }

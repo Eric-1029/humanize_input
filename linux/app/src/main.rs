@@ -6,6 +6,7 @@ mod assets;
 mod cut;
 mod i18n;
 mod params;
+mod size_watch;
 mod widgets;
 
 use std::os::unix::process::CommandExt;

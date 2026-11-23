@@ -17,6 +17,8 @@ use crate::DesktopEvent;
 const ACTIVE: i32 = 2;
 /// Give fcitx5 a moment to apply the switch before the first key.
 const SETTLE: Duration = Duration::from_millis(80);
+/// Longest the UI thread may wait for fcitx.
+const UI_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[zbus::proxy(
     interface = "org.fcitx.Fcitx.Controller1",
@@ -53,13 +55,24 @@ impl ImeGuard {
     /// Switches the focused window's input method off (`direct`) or back on.
     /// Returns whether switching off changed anything, so callers know
     /// whether to switch back later.
+    ///
+    /// Does nothing when switching is turned off in the settings. Runs on the
+    /// UI thread, so each call gives up after a short timeout.
     pub fn switch_focused(&self, direct: bool) -> bool {
-        if direct {
-            self.call(async |p| p.state().await) == Some(ACTIVE)
-                && self.call(async |p| p.deactivate().await).is_some()
-        } else {
-            self.call(async |p| p.activate().await).is_some()
+        if !self.enabled.load(Ordering::SeqCst) {
+            return false;
         }
+        let conn = self.conn.clone();
+        let attempt = async move {
+            let proxy = ControllerProxy::new(&conn).await.ok()?;
+            if direct {
+                (proxy.state().await.ok()? == ACTIVE && proxy.deactivate().await.is_ok()).then_some(())
+            } else {
+                proxy.activate().await.ok()
+            }
+        };
+        let quick = tokio::time::timeout(UI_TIMEOUT, attempt);
+        self.runtime.block_on(quick).ok().flatten().is_some() && direct
     }
 
     pub fn set_enabled(&self, enabled: bool) {

@@ -20,10 +20,15 @@ use crate::widgets::*;
 pub(super) struct TestState {
     /// 0–2: built-in samples; 3: the text in the Source box.
     sample: usize,
+    /// The text being copied, fixed when the test (re)starts, so later
+    /// edits to the Source box cannot change what the sample is scored on.
+    prompt: String,
     /// Monotonic time (µs) of the first key press.
     start_us: Option<i64>,
     events: Vec<SampleEvent>,
     report: Option<FitReport>,
+    /// The analysis is running on a worker thread.
+    analysing: bool,
     /// We switched the input method off and should switch it back.
     ime_switched: bool,
     /// Suppresses recording while the box is cleared programmatically.
@@ -31,6 +36,7 @@ pub(super) struct TestState {
     ui: Option<TestUi>,
 }
 
+#[derive(Clone)]
 struct TestUi {
     prompt: gtk::TextBuffer,
     input: gtk::TextView,
@@ -41,11 +47,27 @@ struct TestUi {
 }
 
 const MIN_CHARS: usize = 30;
+/// Longest Source text used as a sample; analysis time and memory grow
+/// with the square of the length.
+const MAX_PROMPT: usize = 3000;
+
+/// `text` cut to at most `max` characters, at a word boundary when possible.
+fn cap(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_owned();
+    }
+    let cut: String = text.chars().take(max).collect();
+    match cut.rfind(char::is_whitespace) {
+        Some(i) if i > max / 2 => cut[..i].to_owned(),
+        _ => cut,
+    }
+}
 
 impl App {
-    fn test_prompt(&self) -> String {
-        let i = self.test.borrow().sample;
-        SAMPLES.get(i).map_or_else(|| self.text(), |s| (*s).to_owned())
+    /// Widgets of the test page, cloned out so no borrow is held while GTK
+    /// emits signals that come back into the test state.
+    fn test_ui(&self) -> Option<TestUi> {
+        self.test.borrow().ui.clone()
     }
 
     fn test_elapsed(&self) -> Duration {
@@ -54,8 +76,9 @@ impl App {
     }
 
     fn test_record(&self, event: impl FnOnce(Duration) -> SampleEvent, starts: bool) {
-        let mut st = self.test.borrow_mut();
-        if st.resetting || st.report.is_some() {
+        // Busy only while we edit the box ourselves; nothing to record then.
+        let Ok(mut st) = self.test.try_borrow_mut() else { return };
+        if st.resetting || st.report.is_some() || st.analysing {
             return;
         }
         let now = glib::monotonic_time();
@@ -102,10 +125,11 @@ impl App {
         };
         sample.append(&setting_row(
             &tr.t("选择文字", "Text"),
-            &tr.t(
-                "“用原文”会用“输入”页里的文字；它只能包含英文字符。",
-                "Use Source text takes the text from the Input page; it must be plain ASCII.",
-            ),
+            &if tr.zh() {
+                format!("“用原文”会用“输入”页里的文字（最多前 {MAX_PROMPT} 个字符），它只能包含英文字符。")
+            } else {
+                format!("Use Source text takes the text from the Input page (up to {MAX_PROMPT} characters); it must be plain ASCII.")
+            },
             &chooser,
         ));
         let prompt = gtk::TextBuffer::new(Some(&self.buffer.tag_table()));
@@ -113,12 +137,8 @@ impl App {
         prompt_view.add_css_class("source");
         prompt_view.set_editable(false);
         prompt_view.set_cursor_visible(false);
-        prompt_view.set_wrap_mode(gtk::WrapMode::WordChar);
-        prompt_view.set_pixels_inside_wrap(4);
-        prompt_view.set_top_margin(12);
-        prompt_view.set_bottom_margin(12);
-        prompt_view.set_left_margin(14);
-        prompt_view.set_right_margin(14);
+        prompt_view.set_can_focus(false);
+        style_text(&prompt_view);
         let frame = gtk::ScrolledWindow::builder()
             .child(&prompt_view)
             .hscrollbar_policy(gtk::PolicyType::Never)
@@ -134,12 +154,7 @@ impl App {
         typing.append(&panel_head(&pair("Type here", &tr.t("在这里打字", "Type here")), None));
         let input = gtk::TextView::new();
         input.add_css_class("source");
-        input.set_wrap_mode(gtk::WrapMode::WordChar);
-        input.set_pixels_inside_wrap(4);
-        input.set_top_margin(12);
-        input.set_bottom_margin(12);
-        input.set_left_margin(14);
-        input.set_right_margin(14);
+        style_text(&input);
         let input_frame =
             gtk::ScrolledWindow::builder().child(&input).hscrollbar_policy(gtk::PolicyType::Never).build();
         input_frame.add_css_class("source-frame");
@@ -172,7 +187,6 @@ impl App {
         // Rebuilt UI (e.g. language switch): an unfinished test restarts.
         let fresh = self.test.borrow().report.is_none();
         self.test.borrow_mut().ui = Some(TestUi { prompt, input, fields, finish: finish.0, results, notice });
-        prompt_view.set_vexpand(false);
         if fresh {
             self.test_reset();
         } else {
@@ -224,11 +238,15 @@ impl App {
         }
 
         // An input method in Chinese mode would swallow the keys: switch it
-        // off while the box has focus, and back on afterwards.
+        // off while the box has focus. fcitx acts on whichever window has
+        // focus, so only touch it while that window is ours.
         let focus = gtk::EventControllerFocus::new();
         {
             let app = Rc::clone(self);
             focus.connect_enter(move |_| {
+                if !app.window.is_active() || !app.config.borrow().switch_input_method {
+                    return;
+                }
                 if let Some(d) = &app.desktop {
                     let switched = d.set_focused_direct_input(true);
                     app.test.borrow_mut().ime_switched |= switched;
@@ -238,6 +256,11 @@ impl App {
         {
             let app = Rc::clone(self);
             focus.connect_leave(move |_| {
+                // Focus left the window (Alt+Tab): the focused input context
+                // is someone else's now; restore on a later in-window leave.
+                if !app.window.is_active() {
+                    return;
+                }
                 let switched = std::mem::take(&mut app.test.borrow_mut().ime_switched);
                 if switched && let Some(d) = &app.desktop {
                     d.set_focused_direct_input(false);
@@ -247,27 +270,35 @@ impl App {
         input.add_controller(focus);
     }
 
-    /// Puts the cursor in the typing box (keys typed elsewhere would be lost,
-    /// or worse, press buttons).
+    /// Puts the cursor in the typing box, but only while the Test page is
+    /// shown: keys typed into a hidden page would be lost.
     pub(super) fn test_focus_input(&self) {
-        if let Some(ui) = self.test.borrow().ui.as_ref() {
-            let input = ui.input.clone();
+        if self.page.get() != Page::Test {
+            return;
+        }
+        if let Some(ui) = self.test_ui() {
             // After the page is mapped, or the grab does not stick.
             glib::idle_add_local_once(move || {
-                input.grab_focus();
+                ui.input.grab_focus();
             });
         }
     }
 
     fn test_reset(self: &Rc<Self>) {
+        let prompt = {
+            let sample = self.test.borrow().sample;
+            SAMPLES.get(sample).map_or_else(|| cap(&self.text(), MAX_PROMPT), |s| (*s).to_owned())
+        };
         {
             let mut st = self.test.borrow_mut();
+            st.prompt = prompt;
             st.start_us = None;
             st.events.clear();
             st.report = None;
+            st.analysing = false;
             st.resetting = true;
         }
-        if let Some(ui) = self.test.borrow().ui.as_ref() {
+        if let Some(ui) = self.test_ui() {
             ui.input.buffer().set_text("");
             ui.input.set_editable(true);
         }
@@ -278,10 +309,9 @@ impl App {
     }
 
     fn test_show_prompt(&self) {
-        let prompt = self.test_prompt();
+        let Some(ui) = self.test_ui() else { return };
+        let prompt = self.test.borrow().prompt.clone();
         let tr = self.tr();
-        let st = self.test.borrow();
-        let Some(ui) = st.ui.as_ref() else { return };
         ui.prompt.set_text(&prompt);
         let unsupported = self.layout.borrow().find_unsupported(&prompt).len();
         let problem = if prompt.trim().chars().count() < MIN_CHARS {
@@ -301,21 +331,24 @@ impl App {
         };
         set_notice(&ui.notice, problem.as_deref());
         ui.input.set_sensitive(problem.is_none());
-        drop(st);
         self.test_mark();
     }
 
     /// Shades the sample by how far the typed text matches it.
     fn test_mark(&self) {
-        let st = self.test.borrow();
-        let Some(ui) = st.ui.as_ref() else { return };
+        let Some(ui) = self.test_ui() else { return };
+        let (prompt, finished, analysing) = {
+            let st = self.test.borrow();
+            (st.prompt.clone(), st.report.is_some(), st.analysing)
+        };
         let typed = text_of(&ui.input.buffer());
-        let prompt = text_of(&ui.prompt);
         let matched = typed.chars().zip(prompt.chars()).take_while(|(a, b)| a == b).count();
         let (start, end) = ui.prompt.bounds();
         ui.prompt.remove_tag_by_name("cursor", &start, &end);
         ui.prompt.apply_tag_by_name("pending", &start, &end);
-        if st.report.is_some() {
+        let typed_n = typed.chars().count();
+        ui.finish.set_sensitive(!finished && !analysing && typed_n >= MIN_CHARS);
+        if finished {
             ui.prompt.remove_tag_by_name("pending", &start, &end);
             return;
         }
@@ -326,28 +359,19 @@ impl App {
             ui.prompt.apply_tag_by_name("cursor", &cut, &next);
         }
         let tr = self.tr();
-        let typed_n = typed.chars().count();
         let secs = self.test_elapsed().as_secs_f64();
         let wpm =
             if secs > 2.0 { format!("{:.0}", typed_n as f64 / 5.0 / (secs / 60.0)) } else { "--".into() };
+        let total = count(prompt.chars().count());
         ui.fields.set_label(&if tr.zh() {
-            format!(
-                "{} 字符  │  已打 {}  │  用时 {}  │  {} WPM",
-                count(prompt.chars().count()),
-                count(typed_n),
-                clock(secs as u64),
-                wpm
-            )
+            format!("{total} 字符  │  已打 {}  │  用时 {}  │  {wpm} WPM", count(typed_n), clock(secs as u64))
         } else {
             format!(
-                "{} chars  │  typed {}  │  time {}  │  {} WPM",
-                count(prompt.chars().count()),
+                "{total} chars  │  typed {}  │  time {}  │  {wpm} WPM",
                 count(typed_n),
-                clock(secs as u64),
-                wpm
+                clock(secs as u64)
             )
         });
-        ui.finish.set_sensitive(st.report.is_none() && typed_n >= MIN_CHARS);
     }
 
     fn test_changed(self: &Rc<Self>) {
@@ -357,10 +381,11 @@ impl App {
         self.test_mark();
         let done = {
             let st = self.test.borrow();
-            st.report.is_none()
+            !st.analysing
+                && st.report.is_none()
                 && st.ui.as_ref().is_some_and(|ui| {
                     let typed = text_of(&ui.input.buffer());
-                    !typed.is_empty() && typed.trim_end() == text_of(&ui.prompt).trim_end()
+                    !typed.is_empty() && typed.trim_end() == st.prompt.trim_end()
                 })
         };
         if done {
@@ -371,15 +396,35 @@ impl App {
     }
 
     fn test_finish(self: &Rc<Self>) {
+        let tr = self.tr();
         let (prompt, events) = {
             let st = self.test.borrow();
-            if st.report.is_some() {
+            if st.report.is_some() || st.analysing {
                 return;
             }
-            (self.test_prompt(), st.events.clone())
+            (st.prompt.clone(), st.events.clone())
         };
-        let typed = events.iter().filter(|e| matches!(e, SampleEvent::Insert { .. })).count();
-        if typed < MIN_CHARS {
+        // Same rule as the button: enough characters, typed key by key.
+        let typed_by_keys = events
+            .iter()
+            .filter_map(|e| {
+                if let SampleEvent::Insert { text, .. } = e { Some(text.chars().count()) } else { None }
+            })
+            .filter(|n| *n == 1)
+            .count();
+        if typed_by_keys < MIN_CHARS {
+            if let Some(ui) = self.test_ui() {
+                set_notice(
+                    &ui.notice,
+                    Some(&if tr.zh() {
+                        format!("至少要逐个按键打 {MIN_CHARS} 个字符才能分析；粘贴进来的文字不算。")
+                    } else {
+                        format!(
+                            "Type at least {MIN_CHARS} characters key by key to analyse; pasted text does not count."
+                        )
+                    }),
+                );
+            }
             return;
         }
         let base = {
@@ -387,9 +432,28 @@ impl App {
             c.advanced.unwrap_or_else(|| c.preset.model())
         };
         let layout = Arc::clone(&self.layout.borrow());
-        let report = fit(&prompt, &events, &layout, base);
-        if let Some(ui) = self.test.borrow().ui.as_ref() {
+        self.test.borrow_mut().analysing = true;
+        if let Some(ui) = self.test_ui() {
             ui.input.set_editable(false);
+            ui.finish.add_css_class("busy");
+        }
+        self.test_mark();
+
+        // The fit simulates the model on the prompt; keep it off the UI thread.
+        let (tx, rx) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = tx.send_blocking(fit(&prompt, &events, &layout, base));
+        });
+        let app = Rc::clone(self);
+        glib::spawn_future_local(async move {
+            let Ok(report) = rx.recv().await else { return };
+            app.test_finished(report);
+        });
+    }
+
+    fn test_finished(self: &Rc<Self>, report: FitReport) {
+        if !self.test.borrow().analysing {
+            return; // reset while analysing
         }
         let reliable = report.items.iter().filter(|i| i.reliable).count();
         let tr = self.tr();
@@ -408,7 +472,14 @@ impl App {
         if let Some(path) = std::env::var_os("HUMANIZE_INPUT_TEST_REPORT") {
             let _ = std::fs::write(path, format!("{report:#?}"));
         }
-        self.test.borrow_mut().report = Some(report);
+        {
+            let mut st = self.test.borrow_mut();
+            st.report = Some(report);
+            st.analysing = false;
+        }
+        if let Some(ui) = self.test_ui() {
+            ui.finish.remove_css_class("busy");
+        }
         self.test_mark();
         self.test_render();
     }
@@ -432,12 +503,11 @@ impl App {
     }
 
     fn test_render(self: &Rc<Self>) {
-        let st = self.test.borrow();
-        let Some(ui) = st.ui.as_ref() else { return };
+        let Some(ui) = self.test_ui() else { return };
         while let Some(child) = ui.results.first_child() {
             ui.results.remove(&child);
         }
-        let Some(report) = st.report.as_ref() else { return };
+        let Some(report) = self.test.borrow().report.clone() else { return };
         let tr = self.tr();
         let base = {
             let c = self.config.borrow();
@@ -494,14 +564,8 @@ impl App {
             let Some(p) = params::human(item.field) else { continue };
             let row = hbox(12);
             row.add_css_class("row");
-            let name = label(
-                &format!(
-                    "{}{}",
-                    if tr.zh() { p.zh } else { p.en },
-                    if p.unit.is_empty() { String::new() } else { format!("  {}", p.unit) }
-                ),
-                &["name"],
-            );
+            let unit = if p.unit.is_empty() { String::new() } else { format!("  {}", p.unit) };
+            let name = label(&format!("{}{unit}", if tr.zh() { p.zh } else { p.en }), &["name"]);
             name.set_hexpand(true);
             row.append(&name);
             let digits = p.digits as usize;
@@ -528,7 +592,6 @@ impl App {
             let chip_box = hbox(0);
             chip_box.set_width_request(110);
             chip_box.set_halign(gtk::Align::End);
-            chip.set_halign(gtk::Align::End);
             chip_box.append(&spacer());
             chip_box.append(&chip);
             row.append(&chip_box);
@@ -565,7 +628,28 @@ impl App {
     }
 }
 
+fn style_text(view: &gtk::TextView) {
+    view.set_wrap_mode(gtk::WrapMode::WordChar);
+    view.set_pixels_inside_wrap(4);
+    view.set_top_margin(12);
+    view.set_bottom_margin(12);
+    view.set_left_margin(14);
+    view.set_right_margin(14);
+}
+
 fn text_of(buffer: &gtk::TextBuffer) -> String {
     let (s, e) = buffer.bounds();
     buffer.text(&s, &e, false).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cap;
+
+    #[test]
+    fn long_source_text_is_capped_at_a_word_boundary() {
+        assert_eq!(cap("short", 10), "short");
+        assert_eq!(cap("alpha beta gamma", 12), "alpha beta");
+        assert_eq!(cap("abcdefghij", 4), "abcd");
+    }
 }
