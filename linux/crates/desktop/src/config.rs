@@ -122,8 +122,10 @@ impl Config {
         Some(base.join("humanize_input").join("config.toml"))
     }
 
-    /// Loads `path`; a missing file gives the defaults. Unknown or invalid
-    /// fields fall back to defaults instead of failing.
+    /// Loads `path`; a missing file gives the defaults, and missing or
+    /// unknown fields are filled in / ignored. A value of the wrong type or
+    /// out of range is an error: callers should then avoid saving over the
+    /// file, so the user can fix it.
     pub fn load(path: &Path) -> io::Result<Self> {
         match std::fs::read_to_string(path) {
             Ok(text) => {
@@ -219,5 +221,16 @@ mod tests {
 
         let classic = Config { model: ModelKind::Classic, ..config };
         assert!(matches!(classic.typing_mode(), TypingMode::Classic(s) if s.lead_in_delay_ms == 1000));
+    }
+
+    #[test]
+    fn invalid_values_are_reported_not_silently_defaulted() {
+        let path = temp_path("invalid");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        for bad in ["[macros]\nspeed = 300\n", "preset = \"expert\"\n", "lead_in_ms = \"soon\"\n"] {
+            std::fs::write(&path, bad).unwrap();
+            assert!(Config::load(&path).is_err(), "{bad:?} should fail");
+        }
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

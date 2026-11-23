@@ -197,9 +197,9 @@ impl HumanPlanner {
         }
         self.think(self.model.notice_delay_ms);
         let ctrl_backspace = match self.model.word_delete {
-            // Unresolved Auto: no target known (dry runs, tests).
-            WordDelete::Auto | WordDelete::CtrlBackspace => self.layout.modifier_keys().ctrl.is_some(),
-            WordDelete::Backspaces => false,
+            WordDelete::CtrlBackspace => self.layout.modifier_keys().ctrl.is_some(),
+            // Unresolved Auto means the target is unknown: play it safe.
+            WordDelete::Auto | WordDelete::Backspaces => false,
         };
         if ctrl_backspace {
             self.press(Stroke::new(KeyCode::BACKSPACE, Mods::CTRL), true);

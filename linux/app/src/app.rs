@@ -124,9 +124,18 @@ pub struct App {
 impl App {
     pub fn new(gtk_app: &gtk::Application, options: Options) -> Rc<Self> {
         let in_memory = options.screenshot.is_some() || options.demo;
-        let config_path = if in_memory { None } else { Config::default_path() };
+        let mut config_path = if in_memory { None } else { Config::default_path() };
         let first_run = config_path.as_ref().is_some_and(|p| !p.exists());
-        let mut config = config_path.as_ref().and_then(|p| Config::load(p).ok()).unwrap_or_default();
+        let mut config_error = None;
+        let mut config = match config_path.as_ref().map(|p| Config::load(p)) {
+            Some(Ok(c)) => c,
+            Some(Err(e)) => {
+                // Keep the user's file untouched so it can be fixed.
+                config_error = config_path.take().map(|p| format!("{}: {e}", p.display()));
+                Config::default()
+            }
+            None => Config::default(),
+        };
         if let Some(theme) = options.theme {
             config.theme = theme;
         }
@@ -182,7 +191,7 @@ impl App {
         tags.add(&gtk::TextTag::builder().name("cursor").background("#FFFA00").foreground("#161616").build());
         if let Some(path) = &options.text_file {
             match std::fs::read_to_string(path) {
-                Ok(text) => buffer.set_text(&text),
+                Ok(text) => buffer.set_text(&humanize_core::text::normalize_newlines(&text)),
                 Err(e) => eprintln!("{}: {e}", path.display()),
             }
         } else if options.demo || options.screenshot.is_some() {
@@ -215,6 +224,14 @@ impl App {
             estimate_timer: RefCell::new(None),
             keyboard_readout: RefCell::new(None),
         });
+        if let Some(e) = config_error {
+            let tr = app.tr();
+            app.add_log(&if tr.zh() {
+                format!("设置文件有误，已改用默认值，本次修改不会保存：{e}")
+            } else {
+                format!("The settings file is invalid; using defaults and not saving changes this time: {e}")
+            });
+        }
         if let Some(page) = app.options.page {
             app.page.set(page);
         }
@@ -228,8 +245,26 @@ impl App {
 
     /// Stops typing (lifting every key) and quits; used for signals too.
     pub fn quit(&self) {
-        self.cancel_typing();
+        self.shutdown();
         self.gtk_app.quit();
+    }
+
+    /// Releases everything outside the process. Idempotent; runs on every
+    /// quit path (`App` itself is never dropped: long-lived closures hold it).
+    pub fn shutdown(&self) {
+        if let Some(session) = self.session.borrow_mut().take() {
+            session.cancel();
+            // Dropping the last handle joins the worker, which lifts held keys.
+            drop(session);
+        }
+        if let Some(path) = &self.config_path
+            && self.save_timer.borrow_mut().take().is_some()
+        {
+            let _ = self.config.borrow().save(path);
+        }
+        if let Some(d) = &self.desktop {
+            d.shutdown();
+        }
     }
 
     fn tr(&self) -> Tr {
@@ -249,7 +284,7 @@ impl App {
         {
             let app = Rc::clone(self);
             self.window.connect_close_request(move |_| {
-                if app.desktop.is_some() && app.options.screenshot.is_none() {
+                if app.desktop.as_ref().is_some_and(|d| d.has_tray()) && app.options.screenshot.is_none() {
                     app.window.set_visible(false);
                     app.add_log(&app.tr().t(
                         "窗口已收到托盘；从托盘图标可以重新打开。",
@@ -302,7 +337,8 @@ impl App {
         }
 
         self.text_changed();
-        let hidden = self.config.borrow().start_minimized && !first_run && self.desktop.is_some();
+        let has_tray = self.desktop.as_ref().is_some_and(|d| d.has_tray());
+        let hidden = self.config.borrow().start_minimized && !first_run && has_tray;
         if self.options.screenshot.is_some() || !hidden {
             self.window.present();
         }
@@ -486,6 +522,18 @@ impl App {
 
     fn text_changed(self: &Rc<Self>) {
         let text = self.text();
+        // Offsets below are in normalized text; keep the buffer normalized
+        // (e.g. after a Ctrl+V of Windows text) so they match. The deferred
+        // set_text re-enters this function with clean text.
+        if text.contains('\r') {
+            let buffer = self.buffer.clone();
+            glib::idle_add_local_once(move || {
+                let (start, end) = buffer.bounds();
+                let text = buffer.text(&start, &end, false);
+                buffer.set_text(&humanize_core::text::normalize_newlines(&text));
+            });
+            return;
+        }
         let (start, end) = self.buffer.bounds();
         self.buffer.remove_tag_by_name("unsupported", &start, &end);
         let unsupported = self.layout.borrow().find_unsupported(&text);
@@ -570,6 +618,8 @@ impl App {
             )));
             return;
         }
+        // A layout switch during the previous run could not be applied then.
+        let _ = session.set_layout(Arc::clone(&self.layout.borrow()));
         let text = self.text();
         let mode = self.config.borrow().typing_mode();
         let result =
@@ -723,10 +773,7 @@ impl App {
                 self.cancel_typing()
             }
             DesktopEvent::Tray(TrayCommand::ShowWindow) => self.window.present(),
-            DesktopEvent::Tray(TrayCommand::Quit) => {
-                self.cancel_typing();
-                self.gtk_app.quit();
-            }
+            DesktopEvent::Tray(TrayCommand::Quit) => self.quit(),
             DesktopEvent::FocusChanged(_) => {}
             DesktopEvent::LayoutChanged(names) => match humanize_keymap::load(&names) {
                 Ok(layout) => {
@@ -995,7 +1042,7 @@ impl App {
                 let app = Rc::clone(&app);
                 glib::spawn_future_local(async move {
                     if let Ok(Some(text)) = app.window.clipboard().read_text_future().await {
-                        app.buffer.set_text(&text);
+                        app.buffer.set_text(&humanize_core::text::normalize_newlines(&text));
                     }
                 });
             });

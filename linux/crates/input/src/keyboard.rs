@@ -115,9 +115,11 @@ fn write_loop(
     failure: &Mutex<Option<String>>,
 ) {
     let epoch = Instant::now();
+    // u128 nanoseconds: no overflow however long the device lives.
+    let period_ns = period.as_nanos().max(1);
     let next_tick = |now: Instant| {
-        let ticks = (now - epoch).as_nanos() / period.as_nanos() + 1;
-        epoch + period * u32::try_from(ticks).unwrap_or(u32::MAX)
+        let next = ((now - epoch).as_nanos() / period_ns + 1) * period_ns;
+        epoch + Duration::from_nanos(u64::try_from(next).unwrap_or(u64::MAX))
     };
     let mut pending: VecDeque<KeyEvent> = VecDeque::new();
     let mut held: HashSet<KeyCode> = HashSet::new();

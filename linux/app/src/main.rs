@@ -69,6 +69,14 @@ fn ensure_own_scope() {
     if cgroup.lines().any(|l| l.rsplit('/').next().is_some_and(|unit| unit.starts_with(&ours))) {
         return;
     }
+    // systemd-run needs a reachable user manager; exec would otherwise
+    // replace us with a failing systemd-run (SSH, containers, no session).
+    let manager = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(|d| std::path::Path::new(&d).join("systemd/private"))
+        .is_some_and(|socket| socket.exists());
+    if !manager {
+        return;
+    }
     let Ok(exe) = std::env::current_exe() else { return };
     let unit = format!("{ours}-{}.scope", std::process::id());
     // exec only returns on failure; then carry on in the current scope.
@@ -148,6 +156,14 @@ fn main() -> glib::ExitCode {
                     }
                     *slot = Some(app);
                 }
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        gtk_app.connect_shutdown(move |_| {
+            if let Some(app) = state.borrow().as_ref() {
+                app.shutdown();
             }
         });
     }

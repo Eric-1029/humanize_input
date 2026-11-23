@@ -16,8 +16,7 @@ unsafe extern "C" {
 type libc_char = u8;
 
 fn asset_dir() -> PathBuf {
-    let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    base.join("humanize_input")
+    humanize_desktop::private_dir()
 }
 
 fn write_if_changed(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

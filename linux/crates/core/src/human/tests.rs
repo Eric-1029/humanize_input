@@ -122,7 +122,11 @@ fn backspace_word_delete_style_also_reproduces_text() {
 
 #[test]
 fn word_redo_uses_ctrl_backspace_on_eligible_words_only() {
-    let model = HumanModel { word_redo_percent: 100.0, ..no_errors(Preset::Average.model()) };
+    let model = HumanModel {
+        word_redo_percent: 100.0,
+        word_delete: WordDelete::CtrlBackspace,
+        ..no_errors(Preset::Average.model())
+    };
     let r = run("the quick brown foxes, jumped over", model, 3);
     assert_eq!(r.editor.text(), "the quick brown foxes, jumped over");
     assert_clean(&r, "redo");

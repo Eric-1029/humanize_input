@@ -136,8 +136,8 @@ pub(crate) async fn start(
         .map_err(|e| format!("serving the focus object: {e}"))?;
     let bus_name = conn.unique_name().ok_or("no unique DBus name")?.to_string();
 
-    let dir =
-        std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = crate::private_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join(format!("{PLUGIN}-{}.js", std::process::id()));
     std::fs::write(&path, script(&bus_name)).map_err(|e| format!("writing the KWin script: {e}"))?;
 
@@ -171,8 +171,7 @@ pub(crate) async fn stop(conn: &zbus::Connection) {
     if let Ok(scripting) = ScriptingProxy::new(conn).await {
         let _ = scripting.unload_script(PLUGIN).await;
     }
-    let dir =
-        std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let dir = crate::private_dir();
     let _ = std::fs::remove_file(dir.join(format!("{PLUGIN}-{}.js", std::process::id())));
 }
 

@@ -5,9 +5,10 @@
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WordDelete {
-    /// Ctrl+Backspace, except in terminals where it usually deletes only one
-    /// character; there, one Backspace per character. Resolved once the
-    /// target window is known.
+    /// Ctrl+Backspace in known non-terminal apps; one Backspace per character
+    /// in terminals (where Ctrl+Backspace usually deletes a single character)
+    /// and whenever the target app is unknown. Resolved once the target
+    /// window is known.
     #[default]
     Auto,
     /// One Ctrl+Backspace. Natural in editors and browsers; terminals often
@@ -53,7 +54,8 @@ impl WordDelete {
         if self != Self::Auto {
             return self;
         }
-        let Some(app) = app_id.map(str::to_ascii_lowercase) else { return Self::CtrlBackspace };
+        // Unknown target: Backspaces work everywhere, Ctrl+Backspace does not.
+        let Some(app) = app_id.map(str::to_ascii_lowercase) else { return Self::Backspaces };
         // Reverse-DNS ids: compare the last component too (org.kde.konsole).
         let last = app.rsplit('.').next().unwrap_or(&app).to_owned();
         let terminal = app.contains("terminal")
@@ -432,7 +434,7 @@ mod tests {
         for app in ["org.kde.kate", "firefox", "code", "org.kde.dolphin"] {
             assert_eq!(WordDelete::Auto.resolve(Some(app)), WordDelete::CtrlBackspace, "{app}");
         }
-        assert_eq!(WordDelete::Auto.resolve(None), WordDelete::CtrlBackspace);
+        assert_eq!(WordDelete::Auto.resolve(None), WordDelete::Backspaces);
         assert_eq!(WordDelete::Backspaces.resolve(Some("firefox")), WordDelete::Backspaces);
     }
 }

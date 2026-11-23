@@ -18,7 +18,9 @@ mod layout;
 pub mod shortcuts;
 pub mod tray;
 
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use humanize_core::{AlwaysFocused, FocusTracker, SessionHooks};
 use humanize_keymap::XkbNames;
@@ -39,6 +41,24 @@ pub enum DesktopEvent {
     ImeSwitchedOff,
 }
 
+/// A directory only this user can use, for unpacked assets and the KWin
+/// script: `$XDG_RUNTIME_DIR/humanize_input`, else
+/// `$XDG_CACHE_HOME/humanize_input` (or `~/.cache/humanize_input`).
+pub fn private_dir() -> PathBuf {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|p| p.is_absolute());
+    let cache = || {
+        std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+    };
+    let base = runtime.or_else(cache).unwrap_or_else(|| {
+        // Last resort: a per-user name under the temp dir.
+        std::env::temp_dir().join(format!("humanize_input-{}", std::env::var("USER").unwrap_or_default()))
+    });
+    base.join("humanize_input")
+}
+
 pub struct DesktopOptions {
     pub tray: Option<TrayLabels>,
     pub switch_input_method: bool,
@@ -53,6 +73,7 @@ pub struct Desktop {
     shortcuts: Option<shortcuts::Shortcuts>,
     tray: Option<tray::TrayHandle>,
     warnings: Vec<String>,
+    stopped: AtomicBool,
 }
 
 impl Desktop {
@@ -111,7 +132,17 @@ impl Desktop {
         };
 
         runtime.spawn(layout::watch(conn.clone(), tx));
-        Ok(Self { runtime, conn, events, focus, ime, shortcuts, tray, warnings })
+        Ok(Self {
+            runtime,
+            conn,
+            events,
+            focus,
+            ime,
+            shortcuts,
+            tray,
+            warnings,
+            stopped: AtomicBool::new(false),
+        })
     }
 
     /// Events from all services. Clone freely; each event goes to one receiver.
@@ -174,6 +205,19 @@ impl Desktop {
         self.runtime.block_on(shortcuts.configure())
     }
 
+    /// Whether the tray icon is shown (a tray host was found).
+    pub fn has_tray(&self) -> bool {
+        self.tray.is_some()
+    }
+
+    /// Unloads the KWin script. Idempotent; also runs on drop. Call it
+    /// explicitly on quit, since process exit skips destructors.
+    pub fn shutdown(&self) {
+        if self.focus.is_some() && !self.stopped.swap(true, Ordering::SeqCst) {
+            self.runtime.block_on(kwin::stop(&self.conn));
+        }
+    }
+
     pub fn update_tray(&self, labels: TrayLabels, busy: bool) {
         if let Some(tray) = &self.tray {
             self.runtime.block_on(tray.update(labels, busy));
@@ -184,8 +228,6 @@ impl Desktop {
 impl Drop for Desktop {
     fn drop(&mut self) {
         // Leave nothing behind in KWin.
-        if self.focus.is_some() {
-            self.runtime.block_on(kwin::stop(&self.conn));
-        }
+        self.shutdown();
     }
 }
