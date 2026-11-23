@@ -22,7 +22,8 @@ English: [README.md](README.md)
   - 如果 fcitx5 处于中文模式，打字前自动切到英文，结束后切回。
   - 大写锁定打开时拒绝开始，避免字母大小写全部反过来。
 - **全局热键**（XDG GlobalShortcuts 门户）：开始 `Ctrl+Alt+S`、暂停/继续 `Ctrl+Alt+P`、取消 `Ctrl+Alt+Q`。
-- 托盘图标，中英双语界面，浅色和深色主题（默认跟随系统），设置自动保存。
+- **打字测试**：照着一段样本打一遍，程序从你的按键里测出速度、节奏起伏、按住时长、Shift 提前量、各种停顿、错误率、修正习惯等参数，标出每项是否可信，确认后再应用。
+- 托盘图标，中英双语界面，浅色和深色主题（默认跟随系统），窗口变窄时自动改成单列，设置自动保存。
 
 ## 限制
 
@@ -85,6 +86,12 @@ sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --
 
 关闭窗口只会把它收到托盘；退出请用托盘菜单里的"退出"。
 
+### 用打字测试校准
+
+打开"测试"页，选一段样本（或用"原文"里的文字），在下面的框里照着打一遍，打错了像平时一样改。打完最后一个字会自动分析，也可以随时点"结束并分析"。结果页列出每一项的当前值、测得值和样本数：样本足够的标为"可信"，点"应用"后写入"参数"页的自定义值，速度、准确度、稳定度三个滑块归位到 50。样本不足的项保留当前值。测试时程序会把自己窗口的输入法切到英文。
+
+![测试页](docs/screenshots/test-light.png)
+
 ## 配置
 
 配置保存在 `~/.config/humanize_input/config.toml`，修改后自动保存；缺失或无法识别的字段会用默认值。主要字段：
@@ -122,9 +129,10 @@ cargo test --workspace                                        # 不碰系统的�
 cargo test -p humanize-input --test device -- --ignored       # 创建一块真实虚拟设备（不发按键）
 cargo run -p humanize-core --example plan -- average "Hi!"   # 打印按键时间线，不发任何按键
 cargo run -p humanize-e2e                                     # 在自己的窗口里实打并比对
+cargo run -p humanize-e2e --bin detector_check               # 用已知参数往测试页实打，核对测出的值
 ```
 
-界面开发用的选项：`--offline`（不启动桌面服务和虚拟键盘）、`--demo`（往只记录不发送的驱动里打字）、`--screenshot FILE.png`、`--theme`、`--lang`、`--page`。设置环境变量 `HUMANIZE_INPUT_TRACE=FILE` 会记录发出的每个按键事件，可以用 `cargo run -p humanize-e2e --bin replay -- FILE` 回放。
+界面开发用的选项：`--offline`（不启动桌面服务和虚拟键盘）、`--demo`（往只记录不发送的驱动里打字）、`--screenshot FILE.png`、`--size WxH`、`--theme`、`--lang`、`--page`。设置环境变量 `HUMANIZE_INPUT_TRACE=FILE` 会记录发出的每个按键事件，可以用 `cargo run -p humanize-e2e --bin replay -- FILE` 回放。
 
 ## 许可
 

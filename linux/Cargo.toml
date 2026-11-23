@@ -5,7 +5,15 @@ members = ["app", "crates/core", "crates/desktop", "crates/input", "crates/keyma
 [workspace.package]
 edition = "2024"
 license = "MIT"
-version = "0.1.0"
+version = "0.2.0"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Small release binary: whole-program LTO, size-first optimisation, symbols
+# stripped. Panics still unwind so the typing thread can release held keys.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = "s"
+strip = true
