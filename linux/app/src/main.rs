@@ -20,7 +20,7 @@ use humanize_desktop::shortcuts::APP_ID;
 use crate::app::{App, Options, Page};
 
 const USAGE: &str = "usage: humanize_input [--text FILE] [--theme light|dark] [--lang zh|en]
-                      [--page input|tuning|settings] [--offline] [--demo] [--screenshot FILE.png]";
+                      [--page input|tuning|test|settings] [--offline] [--demo] [--screenshot FILE.png [--size WxH]]";
 
 fn parse_args() -> Result<Options, String> {
     let mut options = Options::default();
@@ -42,12 +42,19 @@ fn parse_args() -> Result<Options, String> {
                 options.page = Some(match value()?.as_str() {
                     "tuning" => Page::Tuning,
                     "settings" => Page::Settings,
+                    "test" => Page::Test,
                     _ => Page::Input,
                 })
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--offline" => options.offline = true,
             "--text" => options.text_file = Some(PathBuf::from(value()?)),
+            "--size" => {
+                let v = value()?;
+                let (w, h) = v.split_once('x').ok_or("--size needs WIDTHxHEIGHT")?;
+                options.size =
+                    Some((w.parse().map_err(|_| "bad width")?, h.parse().map_err(|_| "bad height")?));
+            }
             "--demo" => options.demo = true,
             "-h" | "--help" => return Err(USAGE.into()),
             other => return Err(format!("unknown option {other}\n{USAGE}")),

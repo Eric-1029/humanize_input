@@ -11,6 +11,7 @@
 
 pub mod delay;
 pub mod editor;
+pub mod fit;
 pub mod geometry;
 pub mod human;
 pub mod keys;
@@ -22,6 +23,7 @@ pub mod settings;
 pub mod text;
 
 pub use editor::VirtualEditor;
+pub use fit::{FitItem, FitReport, SampleEvent, fit};
 pub use geometry::KeyboardGeometry;
 pub use human::{HumanModel, HumanPlanner, Macros, Preset, WordDelete};
 pub use keys::{Finger, Hand, KeyAction, KeyCode, Mods, Stroke};

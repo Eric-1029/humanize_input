@@ -179,6 +179,12 @@ impl Desktop {
         Arc::clone(&self.ime) as Arc<dyn SessionHooks>
     }
 
+    /// Input method of the window that has focus now (usually ours): `true`
+    /// switches it to direct input and returns whether it was on before.
+    pub fn set_focused_direct_input(&self, direct: bool) -> bool {
+        self.ime.switch_focused(direct)
+    }
+
     pub fn set_switch_input_method(&self, enabled: bool) {
         self.ime.set_enabled(enabled);
     }

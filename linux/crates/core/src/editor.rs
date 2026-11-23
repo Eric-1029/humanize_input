@@ -8,6 +8,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::fit::SampleEvent;
 use crate::keys::{KeyAction, KeyCode, Mods};
 use crate::layout::Layout;
 
@@ -25,6 +26,8 @@ pub struct VirtualEditor {
     longest_hold: Duration,
     rollovers: usize,
     presses: usize,
+    /// When recording, every key and text change, as a GUI would see them.
+    sample: Option<Vec<SampleEvent>>,
 }
 
 impl VirtualEditor {
@@ -38,7 +41,44 @@ impl VirtualEditor {
             longest_hold: Duration::ZERO,
             rollovers: 0,
             presses: 0,
+            sample: None,
         }
+    }
+
+    /// Also records key and text events, in the form the detector analyses.
+    pub fn recording(mut self) -> Self {
+        self.sample = Some(Vec::new());
+        self
+    }
+
+    /// Recorded events (empty unless created with [`recording`](Self::recording)).
+    pub fn sample_events(&self) -> &[SampleEvent] {
+        self.sample.as_deref().unwrap_or_default()
+    }
+
+    fn record(&mut self, event: SampleEvent) {
+        if let Some(sample) = &mut self.sample {
+            sample.push(event);
+        }
+    }
+
+    fn push_char(&mut self, c: char) {
+        let at = self.text.chars().count();
+        self.text.push(c);
+        self.record(SampleEvent::Insert { t: self.now, at, text: c.to_string() });
+    }
+
+    /// Removes the last `n` characters as one edit.
+    fn remove_chars(&mut self, n: usize) {
+        let len = self.text.chars().count();
+        let n = n.min(len);
+        if n == 0 {
+            return;
+        }
+        for _ in 0..n {
+            self.text.pop();
+        }
+        self.record(SampleEvent::Delete { t: self.now, start: len - n, end: len });
     }
 
     pub fn text(&self) -> &str {
@@ -104,6 +144,7 @@ impl VirtualEditor {
             }
         }
         self.held.push((key, self.now));
+        self.record(SampleEvent::KeyDown { t: self.now, key });
         if key.is_modifier() {
             return;
         }
@@ -119,10 +160,10 @@ impl VirtualEditor {
         }
         match key {
             KeyCode::BACKSPACE => {
-                self.text.pop();
+                self.remove_chars(1);
             }
             _ => match self.layout.char_for(key, mods) {
-                Some(c) => self.text.push(c),
+                Some(c) => self.push_char(c),
                 None => self.violations.push(format!("{key:?} with {mods:?} produces nothing")),
             },
         }
@@ -134,6 +175,7 @@ impl VirtualEditor {
             return;
         };
         let (_, since) = self.held.remove(pos);
+        self.record(SampleEvent::KeyUp { t: self.now, key });
         if !key.is_modifier() {
             let hold = self.now - since;
             self.longest_hold = self.longest_hold.max(hold);
@@ -147,22 +189,21 @@ impl VirtualEditor {
     /// then delete one run of word characters (or of punctuation).
     fn delete_word(&mut self) {
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        while self.text.ends_with(|c: char| c.is_whitespace()) {
-            self.text.pop();
+        let chars: Vec<char> = self.text.chars().collect();
+        let mut i = chars.len();
+        while i > 0 && chars[i - 1].is_whitespace() {
+            i -= 1;
         }
-        match self.text.chars().last() {
-            Some(c) if is_word(c) => {
-                while self.text.ends_with(is_word) {
-                    self.text.pop();
-                }
+        if i > 0 && is_word(chars[i - 1]) {
+            while i > 0 && is_word(chars[i - 1]) {
+                i -= 1;
             }
-            Some(_) => {
-                while self.text.ends_with(|c: char| !is_word(c) && !c.is_whitespace()) {
-                    self.text.pop();
-                }
+        } else {
+            while i > 0 && !is_word(chars[i - 1]) && !chars[i - 1].is_whitespace() {
+                i -= 1;
             }
-            None => {}
         }
+        self.remove_chars(chars.len() - i);
     }
 }
 

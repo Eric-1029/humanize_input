@@ -4,6 +4,8 @@
 use humanize_core::{HumanModel, TypingSettings};
 
 pub struct Param {
+    /// The `HumanModel` field name.
+    pub id: &'static str,
     pub zh: &'static str,
     pub en: &'static str,
     pub hint_zh: &'static str,
@@ -26,6 +28,7 @@ pub struct Group {
 macro_rules! p {
     ($field:ident, $zh:literal, $en:literal, $hzh:literal, $hen:literal, $min:expr, $max:expr, $step:expr, $digits:expr, $unit:literal) => {
         Param {
+            id: stringify!($field),
             zh: $zh,
             en: $en,
             hint_zh: $hzh,
@@ -409,6 +412,11 @@ pub static HUMAN: &[Group] = &[
         ],
     },
 ];
+
+/// The descriptor for a `HumanModel` field.
+pub fn human(id: &str) -> Option<&'static Param> {
+    HUMAN.iter().flat_map(|g| g.params.iter()).find(|p| p.id == id)
+}
 
 pub struct ClassicParam {
     pub zh: &'static str,

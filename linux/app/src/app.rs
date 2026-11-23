@@ -20,6 +20,8 @@ use humanize_desktop::{
 use humanize_input::{DeviceIdentity, DryRunDriver, UinputKeyboard, caps_lock_on};
 
 use crate::cut::{CUT_SMALL, CutBin};
+
+mod test_page;
 use crate::i18n::{Tr, clock, count};
 use crate::params;
 use crate::widgets::*;
@@ -28,8 +30,39 @@ use crate::widgets::*;
 pub enum Page {
     Input,
     Tuning,
+    Test,
     Settings,
 }
+
+impl Page {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Input => "input",
+            Self::Tuning => "tuning",
+            Self::Test => "test",
+            Self::Settings => "settings",
+        }
+    }
+}
+
+/// Widgets that change arrangement with the window width.
+#[derive(Default)]
+struct Responsive {
+    /// Two columns only when the window is wide (Input page).
+    wide_rows: Vec<gtk::Box>,
+    /// Two columns down to a medium width (Tuning, Settings).
+    pair_rows: Vec<gtk::Box>,
+    /// The Input page's fixed-width right column.
+    side: Option<gtk::Box>,
+    /// Hidden in a narrow window (brand text, English nav labels).
+    extras: Vec<gtk::Widget>,
+    /// Last applied width bucket.
+    bucket: Option<u8>,
+}
+
+const WIDE: i32 = 1040;
+const MEDIUM: i32 = 900;
+const NARROW: i32 = 760;
 
 /// Start-up options (mostly for development and screenshots).
 #[derive(Debug, Clone, Default)]
@@ -45,6 +78,8 @@ pub struct Options {
     pub offline: bool,
     /// Load this file into the text box at start.
     pub text_file: Option<PathBuf>,
+    /// Window size for screenshots.
+    pub size: Option<(i32, i32)>,
 }
 
 enum Keyboard {
@@ -64,6 +99,8 @@ struct Run {
 
 struct Ui {
     nav: Vec<(Page, gtk::Button)>,
+    /// The content box of each page (the part that animates).
+    pages: Vec<(Page, gtk::Box)>,
     stack: gtk::Stack,
     layout_readout: gtk::Label,
     source_fields: gtk::Label,
@@ -119,6 +156,10 @@ pub struct App {
     estimate_timer: RefCell<Option<glib::SourceId>>,
     /// The virtual-keyboard readout on the Settings page.
     keyboard_readout: RefCell<Option<gtk::Label>>,
+    test: RefCell<test_page::TestState>,
+    responsive: RefCell<Responsive>,
+    /// Page switch waiting for the outgoing page's exit animation.
+    switch_timer: RefCell<Option<glib::SourceId>>,
 }
 
 impl App {
@@ -176,9 +217,10 @@ impl App {
             .default_width(1240)
             .default_height(860)
             .build();
-        window.set_size_request(980, 640);
+        window.set_size_request(560, 480);
         if options.screenshot.is_some() {
-            window.set_default_size(1280, 1500);
+            let (w, h) = options.size.unwrap_or((1280, 1500));
+            window.set_default_size(w, h);
         }
         window.add_css_class("ef");
 
@@ -223,6 +265,9 @@ impl App {
             save_timer: RefCell::new(None),
             estimate_timer: RefCell::new(None),
             keyboard_readout: RefCell::new(None),
+            test: RefCell::default(),
+            responsive: RefCell::default(),
+            switch_timer: RefCell::new(None),
         });
         if let Some(e) = config_error {
             let tr = app.tr();
@@ -324,6 +369,16 @@ impl App {
 
         self.start_keyboard();
         self.bind_hotkeys();
+        self.refresh_all();
+
+        // Follow the window width (cheap: acts only when a breakpoint is crossed).
+        {
+            let app = Rc::clone(self);
+            self.window.add_tick_callback(move |w, _| {
+                app.apply_width(w.width());
+                glib::ControlFlow::Continue
+            });
+        }
 
         // Once a second while typing: elapsed and remaining time.
         {
@@ -345,9 +400,27 @@ impl App {
         if first_run {
             self.schedule_save();
         }
+        // HUMANIZE_INPUT_SHOT_SWITCH=PAGE: switch page at 800 ms (with
+        // HUMANIZE_INPUT_SHOT_DELAY, captures the page transition).
+        if self.options.screenshot.is_some()
+            && let Ok(target) = std::env::var("HUMANIZE_INPUT_SHOT_SWITCH")
+        {
+            let app = Rc::clone(self);
+            glib::timeout_add_local_once(Duration::from_millis(800), move || {
+                let page = [Page::Input, Page::Tuning, Page::Test, Page::Settings]
+                    .into_iter()
+                    .find(|p| p.name() == target)
+                    .unwrap_or(Page::Input);
+                app.show_page(page);
+            });
+        }
         if let Some(path) = self.options.screenshot.clone() {
             let app = Rc::clone(self);
-            let delay = if self.options.demo { 9000 } else { 1200 };
+            // HUMANIZE_INPUT_SHOT_DELAY (ms) overrides, e.g. to catch an animation.
+            let delay = std::env::var("HUMANIZE_INPUT_SHOT_DELAY")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(if self.options.demo { 9000 } else { 1200 });
             glib::timeout_add_local_once(Duration::from_millis(delay), move || app.screenshot(&path));
         }
     }
@@ -841,16 +914,23 @@ impl App {
 
     fn build(self: &Rc<Self>) {
         let tr = self.tr();
+        *self.responsive.borrow_mut() = Responsive::default();
         let stack = gtk::Stack::new();
-        stack.set_transition_type(gtk::StackTransitionType::Crossfade);
-        stack.set_transition_duration(200);
+        // Pages animate themselves (CSS), so the stack switches instantly.
+        stack.set_transition_type(gtk::StackTransitionType::None);
 
         let (titlebar, nav, layout_readout) = self.build_titlebar(&stack);
         self.window.set_titlebar(Some(&titlebar));
 
         let mut ui = self.build_input_page(&stack, nav, layout_readout);
-        stack.add_named(&scrolled(&self.build_tuning_page()), Some("tuning"));
-        stack.add_named(&scrolled(&self.build_settings_page()), Some("settings"));
+        for (page, content) in [
+            (Page::Tuning, self.build_tuning_page()),
+            (Page::Test, self.build_test_page()),
+            (Page::Settings, self.build_settings_page()),
+        ] {
+            stack.add_named(&scrolled(&content), Some(page.name()));
+            ui.pages.push((page, content));
+        }
         ui.stack = stack.clone();
 
         let root = vbox(0);
@@ -859,7 +939,10 @@ impl App {
         stack.set_vexpand(true);
         self.window.set_child(Some(&root));
         *self.ui.borrow_mut() = Some(ui);
-        self.show_page(self.page.get());
+        self.show_page_now(self.page.get());
+        if let Some(width) = Some(self.window.width()).filter(|w| *w > 0) {
+            self.apply_width(width);
+        }
         self.refresh_all();
         if let Some(d) = &self.desktop {
             d.update_tray(self.tray_labels(), false);
@@ -873,14 +956,62 @@ impl App {
         self.bind_hotkeys();
     }
 
-    fn show_page(&self, page: Page) {
+    /// Switches page: the current page exits, then the new one enters.
+    fn show_page(self: &Rc<Self>, page: Page) {
+        let animate = gtk::Settings::default().is_some_and(|s| s.is_gtk_enable_animations());
+        if let Some(id) = self.switch_timer.borrow_mut().take() {
+            id.remove();
+        }
+        let current = self.page.get();
+        self.mark_nav(page);
+        if !animate || current == page {
+            self.show_page_now(page);
+            return;
+        }
+        if let Some(ui) = self.ui.borrow().as_ref()
+            && let Some((_, old)) = ui.pages.iter().find(|(p, _)| *p == current)
+        {
+            old.remove_css_class("enter-a");
+            old.remove_css_class("enter-b");
+            old.add_css_class("leave");
+        }
+        let app = Rc::clone(self);
+        let id = glib::timeout_add_local_once(Duration::from_millis(180), move || {
+            app.switch_timer.borrow_mut().take();
+            app.show_page_now(page);
+        });
+        *self.switch_timer.borrow_mut() = Some(id);
+    }
+
+    /// Shows `page` immediately and plays its entrance.
+    fn show_page_now(&self, page: Page) {
         self.page.set(page);
+        self.mark_nav(page);
+        let Some(ui) = self.ui.borrow().as_ref().map(|ui| (ui.stack.clone(), ui.pages.clone())) else {
+            return;
+        };
+        let (stack, pages) = ui;
+        stack.set_visible_child_name(page.name());
+        for (p, content) in &pages {
+            content.remove_css_class("leave");
+            if *p == page {
+                // Alternate two identical animations so each visit replays it.
+                let (on, off) = if content.has_css_class("enter-a") {
+                    ("enter-b", "enter-a")
+                } else {
+                    ("enter-a", "enter-b")
+                };
+                content.remove_css_class(off);
+                content.add_css_class(on);
+            }
+        }
+        if page == Page::Test {
+            self.test_focus_input();
+        }
+    }
+
+    fn mark_nav(&self, page: Page) {
         if let Some(ui) = self.ui.borrow().as_ref() {
-            ui.stack.set_visible_child_name(match page {
-                Page::Input => "input",
-                Page::Tuning => "tuning",
-                Page::Settings => "settings",
-            });
             for (p, button) in &ui.nav {
                 if *p == page {
                     button.add_css_class("current");
@@ -888,6 +1019,42 @@ impl App {
                     button.remove_css_class("current");
                 }
             }
+        }
+    }
+
+    /// Rearranges the layout when the window crosses a width breakpoint.
+    fn apply_width(&self, width: i32) {
+        let bucket = match width {
+            w if w >= WIDE => 0,
+            w if w >= MEDIUM => 1,
+            w if w >= NARROW => 2,
+            _ => 3,
+        };
+        let mut r = self.responsive.borrow_mut();
+        if r.bucket == Some(bucket) {
+            return;
+        }
+        r.bucket = Some(bucket);
+        let orient = |two_columns: bool| {
+            if two_columns { gtk::Orientation::Horizontal } else { gtk::Orientation::Vertical }
+        };
+        for row in &r.wide_rows {
+            row.set_orientation(orient(bucket == 0));
+        }
+        for row in &r.pair_rows {
+            row.set_orientation(orient(bucket <= 1));
+        }
+        if let Some(side) = &r.side {
+            side.set_size_request(if bucket == 0 { 460 } else { -1 }, -1);
+            side.set_hexpand(bucket != 0);
+        }
+        for w in &r.extras {
+            w.set_visible(bucket <= 2);
+        }
+        if bucket == 3 {
+            self.window.add_css_class("narrow");
+        } else {
+            self.window.remove_css_class("narrow");
         }
     }
 
@@ -914,6 +1081,7 @@ impl App {
         seal.set_valign(gtk::Align::Center);
         bar.append(&CutBin::new(&seal, CUT_SMALL));
         let brand = label("HUMANIZE INPUT", &["brand"]);
+        self.responsive.borrow_mut().extras.push(brand.clone().upcast());
         brand.set_valign(gtk::Align::Center);
         bar.append(&brand);
 
@@ -921,13 +1089,16 @@ impl App {
         for (page, zh, en) in [
             (Page::Input, "输入", "Input"),
             (Page::Tuning, "参数", "Tuning"),
+            (Page::Test, "测试", "Test"),
             (Page::Settings, "设置", "Settings"),
         ] {
             let b = gtk::Button::new();
             b.add_css_class("nav");
             let col = vbox(0);
             col.append(&label(if tr.zh() { zh } else { en }, &["zh"]));
-            col.append(&label(&en.to_uppercase(), &["en"]));
+            let en_label = label(&en.to_uppercase(), &["en"]);
+            self.responsive.borrow_mut().extras.push(en_label.clone().upcast());
+            col.append(&en_label);
             b.set_child(Some(&col));
             let app = Rc::clone(self);
             b.connect_clicked(move |_| app.show_page(page));
@@ -997,13 +1168,11 @@ impl App {
     ) -> Ui {
         let tr = self.tr();
         let page = vbox(20);
-        page.set_margin_top(28);
-        page.set_margin_bottom(28);
-        page.set_margin_start(40);
-        page.set_margin_end(40);
+        page.add_css_class("page");
 
         let columns = hbox(20);
         columns.set_vexpand(true);
+        self.responsive.borrow_mut().wide_rows.push(columns.clone());
 
         // Left: the text.
         let source = panel();
@@ -1057,6 +1226,7 @@ impl App {
         let right = vbox(20);
         right.set_size_request(460, -1);
         right.set_hexpand(false);
+        self.responsive.borrow_mut().side = Some(right.clone());
 
         let session = panel();
         let state_chip = label("", &["state"]);
@@ -1159,6 +1329,7 @@ impl App {
 
         Ui {
             nav,
+            pages: vec![(Page::Input, page.clone())],
             stack: stack.clone(),
             layout_readout,
             source_fields,
@@ -1301,10 +1472,7 @@ impl App {
     fn build_tuning_page(self: &Rc<Self>) -> gtk::Box {
         let tr = self.tr();
         let page = vbox(20);
-        page.set_margin_top(28);
-        page.set_margin_bottom(28);
-        page.set_margin_start(40);
-        page.set_margin_end(40);
+        page.add_css_class("page");
         let c = self.config.borrow().clone();
 
         if c.model == ModelKind::Classic {
@@ -1366,6 +1534,7 @@ impl App {
         let base = c.advanced.unwrap_or_else(|| c.preset.model());
         // Two fixed columns, balanced by row count.
         let grid = hbox(20);
+        self.responsive.borrow_mut().pair_rows.push(grid.clone());
         grid.set_homogeneous(true);
         let columns = [vbox(20), vbox(20)];
         for c in &columns {
@@ -1467,10 +1636,7 @@ impl App {
         let tr = self.tr();
         let c = self.config.borrow().clone();
         let page = vbox(20);
-        page.set_margin_top(28);
-        page.set_margin_bottom(28);
-        page.set_margin_start(40);
-        page.set_margin_end(40);
+        page.add_css_class("page");
         page.append(&page_head(
             &tr.t("设置", "Settings"),
             "Settings",
@@ -1478,6 +1644,8 @@ impl App {
         ));
 
         let columns = hbox(20);
+        // Settings controls are wide: one column below the wide breakpoint.
+        self.responsive.borrow_mut().wide_rows.push(columns.clone());
         let left = vbox(20);
         left.set_hexpand(true);
         let right = vbox(20);

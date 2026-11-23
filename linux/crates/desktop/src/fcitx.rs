@@ -50,6 +50,18 @@ impl ImeGuard {
         Self { runtime, conn, focus, enabled: AtomicBool::new(enabled), restore: Mutex::new(false), events }
     }
 
+    /// Switches the focused window's input method off (`direct`) or back on.
+    /// Returns whether switching off changed anything, so callers know
+    /// whether to switch back later.
+    pub fn switch_focused(&self, direct: bool) -> bool {
+        if direct {
+            self.call(async |p| p.state().await) == Some(ACTIVE)
+                && self.call(async |p| p.deactivate().await).is_some()
+        } else {
+            self.call(async |p| p.activate().await).is_some()
+        }
+    }
+
     pub fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::SeqCst);
     }

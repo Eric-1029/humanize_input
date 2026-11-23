@@ -22,7 +22,8 @@ Types text into any window like a person — with rhythm, pauses and mistakes th
   - If fcitx5 is in Chinese mode, it is switched to direct input for the target and restored afterwards.
   - Typing refuses to start while Caps Lock is on, which would invert letter case.
 - **Global hotkeys** (XDG GlobalShortcuts portal): start `Ctrl+Alt+S`, pause/resume `Ctrl+Alt+P`, cancel `Ctrl+Alt+Q`.
-- Tray icon, Chinese and English interface, light and dark themes (following the system by default), settings saved automatically.
+- **Typing test**: copy a sample once and the app measures your speed, rhythm, key holds, Shift timing, pauses, mistake rates and correction habits from the keystrokes. Each value is marked reliable or not, and you apply them only after reviewing.
+- Tray icon, Chinese and English interface, light and dark themes (following the system by default), single-column layout in narrow windows, settings saved automatically.
 
 ## Limitations
 
@@ -85,6 +86,12 @@ On first start KDE asks you to confirm the three hotkeys. To change them later, 
 
 Closing the window only hides it to the tray; quit from the tray menu.
 
+### Calibrate with the typing test
+
+Open the Test page, pick a sample (or use the Source text) and copy it in the box below, fixing mistakes as you normally would. Typing the last character starts the analysis; Finish and analyse works at any time. The result lists each value as it is now, as measured, and how many observations back it. Values with enough data are marked ok; Apply writes them to the Tuning page and resets the three sliders to 50. Values with too few observations keep their current setting. During the test the app switches its own window's input method to direct input.
+
+![Test page](docs/screenshots/test-light.png)
+
 ## Settings file
 
 Settings live in `~/.config/humanize_input/config.toml` and are saved as you change them. Missing or unknown fields fall back to defaults.
@@ -122,9 +129,10 @@ cargo test --workspace                                        # everything that 
 cargo test -p humanize-input --test device -- --ignored       # creates a real virtual device (sends no keys)
 cargo run -p humanize-core --example plan -- average "Hi!"   # prints the key timeline, sends nothing
 cargo run -p humanize-e2e                                     # types into its own window and compares
+cargo run -p humanize-e2e --bin detector_check               # types into the Test page with a known model, checks the measurements
 ```
 
-Options for interface work: `--offline` (no desktop services or virtual keyboard), `--demo` (types into a recording driver), `--screenshot FILE.png`, `--theme`, `--lang`, `--page`. Setting `HUMANIZE_INPUT_TRACE=FILE` records every key event sent; replay it with `cargo run -p humanize-e2e --bin replay -- FILE`.
+Options for interface work: `--offline` (no desktop services or virtual keyboard), `--demo` (types into a recording driver), `--screenshot FILE.png`, `--size WxH`, `--theme`, `--lang`, `--page`. Setting `HUMANIZE_INPUT_TRACE=FILE` records every key event sent; replay it with `cargo run -p humanize-e2e --bin replay -- FILE`.
 
 ## License
 
