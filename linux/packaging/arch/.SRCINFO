@@ -1,7 +1,7 @@
 pkgbase = humanize-input
 	pkgdesc = Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)
 	pkgver = 0.2.0
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/Eric-1029/humanize_input
 	install = humanize-input.install
 	arch = x86_64

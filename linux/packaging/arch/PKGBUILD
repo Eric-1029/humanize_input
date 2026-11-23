@@ -1,7 +1,7 @@
 # Maintainer: Eric-1029
 pkgname=humanize-input
 pkgver=0.2.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Eric-1029/humanize_input"
@@ -24,6 +24,10 @@ build() {
   cd humanize_input/linux
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
+  # The release profile picks opt-level "s" (half the size of -O3 for this
+  # app); drop makepkg's opt-level so it does not override the profile.
+  RUSTFLAGS="$(sed -E 's/-C ?opt-level=[^ ]+//g' <<< "$RUSTFLAGS")"
+  export RUSTFLAGS
   cargo build --frozen --release -p humanize-input-app
 }
 
