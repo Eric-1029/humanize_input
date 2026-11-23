@@ -1,0 +1,170 @@
+# humanize_input Linux 版：分阶段计划
+
+分支：`linux-rust-port`。C# 代码保持不动，Rust workspace 全部在 `linux/` 下。
+
+## 范围（已确定）
+
+| 项 | 决定 |
+| --- | --- |
+| 平台 | Linux 原生，首要目标 KDE Plasma 6 Wayland |
+| 语言 / 界面 | Rust；GTK4（gtk4-rs，不用 libadwaita）；endfield-ui 风格，变体 `standard` |
+| 字符范围 | 第一版只支持 ASCII（可打印字符 + 换行 + Tab）。文本里有其他字符时标出来并禁止开始 |
+| 键盘注入 | uinput 仿真 USB 键盘：BUS_USB、通用设备名和 VID/PID（可改）、`MSC_SCAN`、按键重叠 |
+| 键位映射 | xkbcommon 读系统当前布局，反查 字符 → 键码 + 修饰键；邻键表按实际布局生成 |
+| 打字模型 | 先照搬原版并用测试锁住，再大幅升级（见第二阶段） |
+| 热键 | XDG GlobalShortcuts 门户 |
+| 失焦暂停 | KWin 脚本通过 DBus 上报活动窗口；其他桌面不做失焦检测 |
+| 其他 | 托盘（StatusNotifierItem）、启动最小化、中英双语界面、TOML 配置 |
+| 不做 | 中文 / CJK 输入、输入检测器（参数拟合） |
+
+## 目录结构
+
+```
+linux/
+  Cargo.toml          workspace
+  crates/core         打字模型、动作序列、会话状态机（纯逻辑，不依赖平台）
+  crates/keymap       xkbcommon：字符 → 键码，邻键表          （第三阶段）
+  crates/input        uinput 虚拟 USB 键盘                     （第三阶段）
+  crates/desktop      门户热键、KWin 失焦、托盘                 （第四阶段）
+  app/                GTK4 界面                                 （第五阶段）
+  assets/             字体 + 许可证、主题 CSS、KWin 脚本
+  docs/PLAN.md        本文件
+```
+
+---
+
+## 第一阶段：核心移植（`crates/core`）✅ 已完成
+
+目标：原版 `TypingSessionService` 的行为一比一移植到 Rust，同时把结构改成"动作规划 + 会话执行"两层。
+
+**动作规划（`plan`）**
+- `Planner` 是一个迭代器：输入文本、参数和随机数生成器，按需产出 `Action`：`Type(char)`、`Backspace`、`Wait(Duration)`、`Progress(TypingProgress)`。
+- 保留原版全部规则：错字（按邻键距离加权）、漏字、相邻颠倒、修复率、修复前先往前多打 1–2 个字（约 35% 的概率）、数字不出错字、空白字符不参与颠倒、`\r\n` / `\r` 统一成 `\n`。
+- 随机数用 ChaCha8，同一个种子永远产出同一串动作，测试可以复现。
+- 邻键表做成可替换的 `KeyboardGeometry`；第一阶段内置美式 QWERTY（和原版一致），第三阶段由 xkbcommon 生成。
+
+**会话执行（`session`）**
+- `Session` 在后台线程里取动作、交给 `Driver`（`type_char` / `backspace`）执行。
+- 状态：`Idle` → `Arming`（前置倒计时）→ `Running` ⇄ `Paused` / `WaitingFocus` → `Completed` / `Faulted`，取消回到 `Idle`。
+- 相对原版的两处改动：
+  1. 前置延迟和"倒计时结束时捕获目标窗口"从界面层移进会话（新增 `Arming`）。
+  2. "用户暂停"和"失焦等待"分开成两个状态。原版两者都叫 Paused，失焦时按"继续"会被误判为已经恢复。
+- 焦点由 `FocusTracker` 接口提供：开始时捕获目标，之后每次按键前检查一遍；不支持的桌面用"永远在焦点上"的实现。
+- 所有等待都能被暂停或取消立即打断（Condvar），不会卡在一段长延迟里。
+- 对外的事件是结构化的 `SessionEvent`（状态、进度、日志码），文案在界面层翻译，便于双语。
+- 文本校验 `validate_text`：返回所有不支持字符的位置。
+
+**测试**
+- 移植原版全部测试：换行规整、取消后在会话真正退出前拒绝重新开始、修复前先等焦点恢复、取消后可以重新开始、延迟在范围内。
+- 新增：同一种子结果完全一致；修复率 100% 时把动作回放到文本缓冲区，结果与原文完全相同；各类错误开关为 0 时逐字照打；数字从不被打错；不支持字符的定位。
+- `examples/plan.rs`：在终端打印一段文本的动作序列，不发任何按键。
+
+**完成标准**：`cargo test`、`cargo clippy -- -D warnings`、`cargo fmt --check` 全部通过。
+
+**完成记录**：单元测试 19 个、会话集成测试 11 个，全部通过（连续 5 次无偶发失败）。
+
+**照搬过来的原版怪癖**（留到第二阶段修）：
+- 漏字后修复时，如果没有往前多打字符，表现为原地停顿"错误发现延迟"后再补打这个字，中间没有任何删除动作，看起来像一次无缘无故的停顿。
+- 修复前往前多打的 1–2 个字符之间没有间隔，是瞬间连打的。
+
+## 第二阶段：打字模型升级（`crates/core`）✅ 已完成
+
+- **按键层**：动作从"字符"细化到"按键事件"（按下 / 抬起 + 时间戳）。每个键的按住时长单独随机；快打时允许重叠（前一个键还没抬起，下一个已经按下）；Shift 按左右手选，连续大写时一直按住。
+- **时间模型**：按手指和字母组合定间隔（同指连按最慢，左右手交替最快，常见组合更快），延迟服从对数正态分布。
+- **节奏**：熟悉的单词一口气打完，句子和段落之间停下来想一想，偶尔长时间停顿；随着时间推移越打越慢，错误率略升。
+- **新增错误**：多按一次、Shift 没按好（大小写错）、整词打错后用 Ctrl+Backspace 删掉。
+- **四档预设**：生疏、普通、熟练、打字员；外加三个总滑块（速度、准确度、稳定度），每个总滑块同时带动一组底层参数。
+- 第一阶段的测试保留为"原版兼容模式"。
+- 修掉第一阶段记录的两个原版怪癖。
+
+**完成记录**
+- 驱动接口改为按键级 `key(code, down)`，键码用 Linux evdev 编号；新增 `Layout`（内置 US QWERTY，含每个键的位置和手指）。
+- 新增拟人模型 `HumanPlanner`，分两层：意图层决定打什么、哪里出错；运动层负责按键时机、按住时长、按键重叠和修饰键时序。原版模型保留为原版兼容模式，用 `ClassicKeys` 转成按键。
+- 参数共 29 项，提供四档预设和三个总滑块（速度、准确度、稳定度）。
+- 会话层：暂停、失焦、取消、出错时都会抬起所有键；被打断的修饰键在下一次按键前重新按下。
+- 测试用 `VirtualEditor`：把按键事件回放成文本，并检查各种违规：重复按下、抬起没按下的键、按住超过 300ms。
+- 测试：单元 44 个，会话 12 个，连续 5 次通过。另做了一次变异检查：去掉"Shift 必须先抬起"这条约束后，有 4 个测试失败。
+- 两个原版怪癖已在拟人模式里修掉：漏字至少要再打一个字才会被发现；回改前往前多打的字符之间也有正常间隔。
+- 已知限制：Ctrl+Backspace 在终端里通常只删一个字符。整词重打有两种方式，在终端里应该选"逐个退格"。
+
+## 第三阶段：输入层（`crates/keymap`、`crates/input`）✅ 已完成
+
+- `keymap`：用 xkbcommon 加载当前布局（读 KDE 的 `kxkbrc`，读不到就用 XKB 默认值），反查每个字符对应的键码和修饰键（Shift / AltGr），按物理键位生成邻键表。
+- `input`：通过 uinput 创建一块虚拟 USB 键盘，默认设备名和 VID/PID 可以在设置里改；每次按键带 `MSC_SCAN` 扫描码并以 `SYN_REPORT` 结束；退出或出错时把所有还按着的键抬起。
+- 演练驱动：只打印事件，不真发按键。
+- 在 Kate、Firefox、Konsole 里实测：US 和一种非 US 布局各测一遍。
+
+**完成记录**
+- `keymap`：从 kxkbrc（或系统默认）读出 RMLVO，用 xkbcommon 编译后反查每个字符对应的键和修饰键（Shift / AltGr）。还会自动识别被选项改过的 Ctrl 和 AltGr，并核对 Backspace、Enter、Tab、Space 是否还在原位。死键上的字符不支持。ISO 键盘左 Shift 旁多出来的那个键只在别处打不出某个字符时才用。物理位置和手指来自 core 的 `standard_keys()`，与布局无关。
+- `input`：直接用 ioctl 创建 uinput 设备，声明 BUS_USB、VID/PID、105 键、`MSC_SCAN`、三个锁定 LED 和 `EV_REP`。每个按键事件前先发 HID 扫描码。后台线程按 USB 轮询率（默认 1000Hz）分帧，帧内顺序和真实 HID 报告一致：修饰键在前，然后抬起，最后按下；同一个键在一帧里只变化一次。设备销毁前会把所有按着的键抬起。另外提供 `caps_lock_on()` 和 `DryRunDriver`。
+- `tools/e2e`：在真实桌面上开一个 GTK 窗口，用虚拟键盘往里打字，再读回内容比对。只在自己的窗口处于激活状态时才发键。
+- 实机结果（KDE Plasma 6.8 Wayland，us）：拟人模式不出错 146 字符、拟人模式带错误和修正 146 字符、原版模式 146 字符、强制 Ctrl+Backspace 整词重打 52 字符，全部和原文完全一致。
+- 测试：keymap 6 个（us / de / fr / dvorak / 交换过的 Ctrl / kxkbrc 解析），input 7 个，另有 2 个真实设备测试（`--ignored`，只建设备不发键，核对 sysfs 中的身份信息和能力位）。
+- 没在实机上测：非 US 布局（需要切换你的系统布局），已由 xkb 单元测试覆盖。Kate、Firefox、Konsole 三个程序的实测留到第五阶段，和界面一起做。
+
+**发现的问题，交给第四阶段**
+- fcitx5 处于中文模式时会吞掉英文字母。目标窗口获得焦点后，需要通过 DBus 把输入法切到英文，结束后再恢复。
+- 整词删除方式按目标窗口自动选择（用户已确认）：目标是终端（konsole、kitty、alacritty、wezterm、foot、xterm 等）时逐个退格，其他程序用 Ctrl+Backspace。
+- 键盘布局应取 KDE 当前激活的那个（通过 DBus `org.kde.keyboard`），而不是配置里的第一个。
+
+## 第四阶段：桌面集成（`crates/desktop`）✅ 已完成
+
+- GlobalShortcuts 门户（`ashpd`）：开始、暂停 / 继续、取消三个热键；应用里填建议组合，KDE 弹窗确认，界面显示实际生效的组合。
+- KWin 脚本：通过 DBus 加载，把活动窗口的变化回传给应用，实现 `FocusTracker`。
+- 托盘（`ksni`）：打开窗口、开始、暂停、退出；启动后缩到托盘。
+- 配置：TOML 文件，放在 `~/.config/humanize_input/config.toml`，修改后自动保存。
+
+**完成记录**
+- `Desktop` 自带一个 tokio 运行时，所有桌面服务的消息都汇总到一个事件通道里发给界面。任何一项服务启动失败都不会影响其他服务，`warnings()` 会说明缺了什么。
+- **KWin 焦点**：通过 DBus 往 KWin 加载一个 JS 脚本，活动窗口一变就回调我们导出的 DBus 对象，带上窗口 UUID、应用 ID、标题和 pid。程序自己的窗口不算目标，防止往自己界面里打字。程序退出时会卸载脚本（已确认卸载后不再存在）。
+- **fcitx5**：开始打字前，如果目标窗口的输入法处于中文模式，就切到英文；结束后，如果目标还在焦点上，再切回去。实测把测试窗口强制切到中文后，不切换时 "hello world" 变成了 "合理咯"；切换后完全正确。
+- **键盘布局**：通过 DBus `org.kde.keyboard` 读取当前激活的布局并监听切换；model 和 options 取自 kxkbrc。
+- **热键**：用 GlobalShortcuts 门户绑定三个热键；也能打开 KDE 的快捷键设置（门户 v2）。实测用虚拟键盘按下 Ctrl+Alt+S/P/Q，三个事件都完整收到。
+- **托盘**：用 ksni 实现 StatusNotifierItem，菜单文字由界面传入；忙碌时换图标。
+- **core 的配套改动**：新增 `WordDelete::Auto`（默认），在捕获目标后按应用 ID 决定删词方式，终端逐个退格，其他程序用 Ctrl+Backspace；新增 `SessionHooks`；`FocusTracker::app_id`；参数类型加了可选 serde 支持。
+- **配置**：TOML 格式，原子写入；字段缺失或无法识别时用默认值。
+- 测试：core 45 + 13 个，desktop 5 个；`tools/e2e` 新增 `--desktop` / `--ime-on` 选项和 `hotkey_check`。
+
+**发现的问题，交给第五阶段**
+- 从终端启动时，门户会根据进程所在的 systemd scope 把我们认成终端或 VS Code，热键也会记在那个应用名下（测试时出现过，已清理）。第五阶段启动时检测 cgroup，scope 不对就用 `systemd-run --user --scope --unit=app-dev.humanize_input.HumanizeInput-<pid>.scope` 重新启动自己；第六阶段再提供 .desktop 文件。
+
+## 第五阶段：界面（`app/`）✅ 已完成
+
+- 控制台型主窗口，最小宽度约 960：深色命令栏；文本区（不支持的字符高亮并显示个数）；大数字看板（已打字数 / 总字数、错误、修正、剩余时间）；档位和三个总滑块；可以展开的高级参数面板（支持导入、导出）；热键设置。
+- 主题 CSS 由 endfield-ui 的 `tokens.json` 生成，颜色定义只放在一处；跟随系统深浅色，系统关闭动画时界面动效也全部关闭。
+- 字体用 Saira 的静态实例（字宽 125 / 112 / 100），随包附上 OFL 许可证。
+- 中英文案切换。
+- 截图检查：浅色、深色、关闭动画各一次。
+
+**变体卡**
+```
+变体：标准（yellow / neutral / standard / contours / standard / full）
+主视觉：当前会话的大号进度读数（已打 / 总字符）、24 格进度条，以及原文里按进度着色的已打部分和黄色光标
+页面类型：控制台（输入页），其余两页为设置类
+```
+颜色定义只在 `app/src/theme.css` 顶部（`window.ef` 和深色覆盖）这一处。
+
+**和最接近的模板（控制台）的不同**
+1. 没有圆盘：控制台中间换成了这个产品自己的数据，即进度读数、原文和光标。
+2. 版式是两栏：左边原文，右边会话、档位、热键三块；记录放在底部通栏。参数页和设置页用的是成组的设置行。
+3. 看板一律直角（看板不可点击）；切角只用在按钮、导航当前项和徽记上。
+
+**完成记录**
+- 用 GTK4（gtk4-rs），不用 libadwaita。命令栏就是窗口标题栏（深色，可以拖动），窗口按钮自己绘制。Saira 可变字体打包进二进制，启动时用 fontconfig 注册，宽度靠 CSS `font-variation-settings` 拉开。等高线底纹按浅色、深色各生成一份 SVG。
+- 切角：GTK CSS 没有 clip-path，所以写了 `CutBin` 组件，在快照里用 `push_fill` 按多边形裁剪子组件，悬停擦入和焦点框都在切角内绘制。
+- 动效只用 CSS transition（擦入 280ms mech、页签伸开 400ms、进度格 220ms），系统关闭动画时 GTK 自动停用。
+- 三页：输入（原文、会话、档位、热键、记录）、参数（28 项数值分 5 组，支持导出 / 导入 TOML）、设置（语言、外观、倒计时、删词方式、托盘、输入法切换、虚拟键盘身份、系统状态）。中英文切换时整个界面重建。
+- 启动时：在 `~/.local/share/applications` 写一份隐藏的 .desktop 文件（门户靠它识别应用）；用 `systemd-run --scope` 进入专属 scope；收到 SIGTERM 或 SIGINT 时停止输入、抬起所有键再退出，同时卸载 KWin 脚本。
+- 开发选项：`--text FILE`、`--offline`、`--demo`（往只记录不发送的驱动里打字）、`--screenshot FILE`、`--theme`、`--lang`、`--page`；设置 `HUMANIZE_INPUT_TRACE=FILE` 会记录发出的每个按键事件，配合 `tools/e2e` 里的 `replay` 回放。
+- 截图在 `docs/screenshots/`：浅色和深色、英文、输入中、参数、设置。
+- **实机验证（真实应用）**：启动后热键注册到 `dev.humanize_input.HumanizeInput` 名下（用户在 KDE 弹窗里确认过）；用虚拟键盘按 Ctrl+Alt+S 开始输入，KWin 捕获 Konsole 为目标，文字通过 `cat > 文件` 写入文件，和原文逐字一致。按键记录里有 24 次退格、0 次 Ctrl，说明终端里自动改用了逐个退格。另有一轮实测中，Konsole 收到的内容和按键记录回放的结果完全一致，说明按键传递是可靠的。
+- 已知限制：KWin 通过 DBus 回报焦点变化有几毫秒延迟，这段时间里如果焦点被抢走（比如弹出通知），可能有几个键落到别的窗口。第一轮实测出现过一次少了 4 个字符的情况，原因推测如此，未能复现。
+
+## 第六阶段：收尾 ✅ 已完成
+
+- `linux/README.md`：构建、uinput 权限、热键授权、已知限制。
+- 打包：PKGBUILD（CachyOS / Arch）。
+
+**完成记录**
+- `README.md` / `README.zh-CN.md`：功能、限制、安装（包、源码、uinput 权限）、使用、配置字段、开发与测试。仓库根目录的两份 README 加了 Linux 版的入口。
+- `packaging/`：`dev.humanize_input.HumanizeInput.desktop`（已通过 desktop-file-validate）、udev 规则（让当前会话的用户能写 `/dev/uinput`）、开机加载 `uinput` 的配置、`arch/PKGBUILD` 和安装脚本。

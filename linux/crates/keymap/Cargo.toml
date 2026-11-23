@@ -1,0 +1,13 @@
+[package]
+name = "humanize-keymap"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+humanize-core = { path = "../core" }
+xkbcommon = { version = "0.9.0", default-features = false }
+xkeysym = "0.2.1"
+
+[lints]
+workspace = true

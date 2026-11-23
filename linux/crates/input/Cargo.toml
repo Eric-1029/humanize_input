@@ -1,0 +1,15 @@
+[package]
+name = "humanize-input"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+humanize-core = { path = "../core" }
+libc = "0.2"
+
+[dev-dependencies]
+humanize-keymap = { path = "../keymap" }
+
+[lints]
+workspace = true

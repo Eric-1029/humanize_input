@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=humanize_input
+GenericName=Human-like typing
+GenericName[zh_CN]=拟人输入
+Comment=Types text into any window like a person, through a virtual USB keyboard
+Comment[zh_CN]=通过虚拟 USB 键盘，像人一样把文字打进任意窗口
+Exec=humanize_input
+Icon=input-keyboard
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=typing;keyboard;autotype;input;
+StartupNotify=true
+SingleMainWindow=true

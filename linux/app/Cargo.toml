@@ -1,0 +1,23 @@
+[package]
+name = "humanize-input-app"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+description = "Types text like a person, through a virtual USB keyboard (KDE Plasma, Wayland)"
+
+[[bin]]
+name = "humanize_input"
+path = "src/main.rs"
+
+[dependencies]
+async-channel = "2.5.0"
+glib-unix = "0.22.8"
+gtk = { version = "0.11.5", package = "gtk4", features = ["v4_16"] }
+humanize-core = { path = "../crates/core", features = ["serde"] }
+humanize-desktop = { path = "../crates/desktop" }
+humanize-input = { path = "../crates/input" }
+humanize-keymap = { path = "../crates/keymap" }
+toml = "1.2.2"
+
+[lints]
+workspace = true

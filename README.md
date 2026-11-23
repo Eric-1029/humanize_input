@@ -4,6 +4,8 @@ Windows-native human-like typing simulator built with C# and WPF.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
+Looking for Linux? A native Rust + GTK4 version for KDE Plasma lives in [linux/](linux/README.md).
+
 ## Features Implemented
 
 - Character-by-character typing from pasted text

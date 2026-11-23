@@ -1,0 +1,17 @@
+[package]
+name = "humanize-e2e"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+publish = false
+default-run = "humanize-e2e"
+
+[dependencies]
+gtk = { version = "0.11.5", package = "gtk4" }
+humanize-core = { path = "../../crates/core" }
+humanize-input = { path = "../../crates/input" }
+humanize-keymap = { path = "../../crates/keymap" }
+humanize-desktop = { path = "../../crates/desktop" }
+
+[lints]
+workspace = true
