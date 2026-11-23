@@ -38,10 +38,22 @@ English: [README.md](README.md)
 
 ```sh
 cd linux/packaging/arch
-makepkg -si
+makepkg -si   # 构建已发布的版本（标签 linux-v<版本号>）
 ```
 
 安装包会同时装上 udev 规则（允许当前登录用户使用 `/dev/uinput`）、开机加载 `uinput` 模块的配置，以及应用的 .desktop 文件。第一次安装后如果仍然提示没有 `/dev/uinput` 权限，注销后重新登录即可。
+
+### 预编译版本（任意发行版，x86_64）
+
+从 [Releases](https://github.com/Eric-1029/humanize_input/releases) 下载 `humanize_input-linux-v<版本号>-x86_64.tar.gz`，解压后：
+
+```sh
+sudo install -Dm644 60-humanize-input-uinput.rules /usr/lib/udev/rules.d/60-humanize-input-uinput.rules
+sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --sysname-match=uinput
+./humanize_input
+```
+
+需要系统里有 GTK 4.16+、libxkbcommon 和 fontconfig。想从应用菜单启动，可以把 `humanize_input` 放进 `PATH`（例如 `~/.local/bin`），再把 `dev.humanize_input.HumanizeInput.desktop` 复制到 `~/.local/share/applications/`。
 
 ### 从源码运行
 

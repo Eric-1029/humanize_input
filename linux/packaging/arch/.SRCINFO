@@ -1,6 +1,6 @@
-pkgbase = humanize-input-git
+pkgbase = humanize-input
 	pkgdesc = Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)
-	pkgver = r0
+	pkgver = 0.1.0
 	pkgrel = 1
 	url = https://github.com/Eric-1029/humanize_input
 	install = humanize-input.install
@@ -16,9 +16,7 @@ pkgbase = humanize-input-git
 	depends = systemd
 	optdepends = fcitx5: switched to direct input automatically while typing
 	optdepends = plasma-workspace: focus detection, layout tracking and global hotkeys
-	provides = humanize-input
-	conflicts = humanize-input
-	source = humanize_input::git+https://github.com/Eric-1029/humanize_input.git#branch=linux-rust-port
+	source = humanize_input::git+https://github.com/Eric-1029/humanize_input.git#tag=linux-v0.1.0
 	sha256sums = SKIP
 
-pkgname = humanize-input-git
+pkgname = humanize-input

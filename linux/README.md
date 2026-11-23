@@ -38,10 +38,22 @@ Types text into any window like a person — with rhythm, pauses and mistakes th
 
 ```sh
 cd linux/packaging/arch
-makepkg -si
+makepkg -si   # builds the tagged release (linux-v<version>)
 ```
 
 The package also installs a udev rule that lets the logged-in user use `/dev/uinput`, a modules-load entry for `uinput`, and the desktop file. If the app still reports no access to `/dev/uinput` right after installing, log out and back in.
+
+### Prebuilt binary (any distribution, x86_64)
+
+Download `humanize_input-linux-v<version>-x86_64.tar.gz` from [Releases](https://github.com/Eric-1029/humanize_input/releases), extract it, then:
+
+```sh
+sudo install -Dm644 60-humanize-input-uinput.rules /usr/lib/udev/rules.d/60-humanize-input-uinput.rules
+sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger --sysname-match=uinput
+./humanize_input
+```
+
+It needs GTK 4.16+, libxkbcommon and fontconfig on the system. To start it from the application menu, put `humanize_input` on your `PATH` (e.g. `~/.local/bin`) and copy `dev.humanize_input.HumanizeInput.desktop` to `~/.local/share/applications/`.
 
 ### From source
 
