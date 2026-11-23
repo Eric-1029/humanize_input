@@ -1,6 +1,6 @@
 # Maintainer: Eric-1029
 pkgname=humanize-input
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)"
 arch=('x86_64' 'aarch64')

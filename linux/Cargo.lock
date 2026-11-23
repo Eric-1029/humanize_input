@@ -631,7 +631,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "humanize-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rand",
  "rand_chacha",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "humanize-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ashpd",
  "async-channel",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "humanize-e2e"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gtk4",
  "humanize-core",
@@ -667,7 +667,7 @@ dependencies = [
 
 [[package]]
 name = "humanize-input"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "humanize-core",
  "humanize-keymap",
@@ -676,7 +676,7 @@ dependencies = [
 
 [[package]]
 name = "humanize-input-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-channel",
  "glib-unix",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "humanize-keymap"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "humanize-core",
  "xkbcommon",
