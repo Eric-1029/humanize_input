@@ -5,7 +5,7 @@ pkgrel=2
 pkgdesc="Types text like a person through a virtual USB keyboard (KDE Plasma, Wayland/X11)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Eric-1029/humanize_input"
-license=('MIT' 'OFL-1.1')
+license=('Apache-2.0' 'OFL-1.1')
 depends=('gtk4' 'libxkbcommon' 'fontconfig' 'systemd')
 optdepends=('fcitx5: switched to direct input automatically while typing'
             'plasma-workspace: focus detection, layout tracking and global hotkeys')
