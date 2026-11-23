@@ -87,12 +87,25 @@ linux/
 - 两个原版怪癖已在拟人模式里修掉：漏字至少要再打一个字才会被发现；回改前往前多打的字符之间也有正常间隔。
 - 已知限制：Ctrl+Backspace 在终端里通常只删一个字符。整词重打有两种方式，在终端里应该选"逐个退格"。
 
-## 第三阶段：输入层（`crates/keymap`、`crates/input`）
+## 第三阶段：输入层（`crates/keymap`、`crates/input`）✅ 已完成
 
 - `keymap`：用 xkbcommon 加载当前布局（读 KDE 的 `kxkbrc`，读不到就用 XKB 默认值），反查每个字符对应的键码和修饰键（Shift / AltGr），按物理键位生成邻键表。
 - `input`：通过 uinput 创建一块虚拟 USB 键盘，默认设备名和 VID/PID 可以在设置里改；每次按键带 `MSC_SCAN` 扫描码并以 `SYN_REPORT` 结束；退出或出错时把所有还按着的键抬起。
 - 演练驱动：只打印事件，不真发按键。
 - 在 Kate、Firefox、Konsole 里实测：US 和一种非 US 布局各测一遍。
+
+**完成记录**
+- `keymap`：从 kxkbrc（或系统默认）读出 RMLVO，用 xkbcommon 编译后反查每个字符对应的键和修饰键（Shift / AltGr）。还会自动识别被选项改过的 Ctrl 和 AltGr，并核对 Backspace、Enter、Tab、Space 是否还在原位。死键上的字符不支持。ISO 键盘左 Shift 旁多出来的那个键只在别处打不出某个字符时才用。物理位置和手指来自 core 的 `standard_keys()`，与布局无关。
+- `input`：直接用 ioctl 创建 uinput 设备，声明 BUS_USB、VID/PID、105 键、`MSC_SCAN`、三个锁定 LED 和 `EV_REP`。每个按键事件前先发 HID 扫描码。后台线程按 USB 轮询率（默认 1000Hz）分帧，帧内顺序和真实 HID 报告一致：修饰键在前，然后抬起，最后按下；同一个键在一帧里只变化一次。设备销毁前会把所有按着的键抬起。另外提供 `caps_lock_on()` 和 `DryRunDriver`。
+- `tools/e2e`：在真实桌面上开一个 GTK 窗口，用虚拟键盘往里打字，再读回内容比对。只在自己的窗口处于激活状态时才发键。
+- 实机结果（KDE Plasma 6.8 Wayland，us）：拟人模式不出错 146 字符、拟人模式带错误和修正 146 字符、原版模式 146 字符、强制 Ctrl+Backspace 整词重打 52 字符，全部和原文完全一致。
+- 测试：keymap 6 个（us / de / fr / dvorak / 交换过的 Ctrl / kxkbrc 解析），input 7 个，另有 2 个真实设备测试（`--ignored`，只建设备不发键，核对 sysfs 中的身份信息和能力位）。
+- 没在实机上测：非 US 布局（需要切换你的系统布局），已由 xkb 单元测试覆盖。Kate、Firefox、Konsole 三个程序的实测留到第五阶段，和界面一起做。
+
+**发现的问题，交给第四阶段**
+- fcitx5 处于中文模式时会吞掉英文字母。目标窗口获得焦点后，需要通过 DBus 把输入法切到英文，结束后再恢复。
+- 整词删除方式按目标窗口自动选择（用户已确认）：目标是终端（konsole、kitty、alacritty、wezterm、foot、xterm 等）时逐个退格，其他程序用 Ctrl+Backspace。
+- 键盘布局应取 KDE 当前激活的那个（通过 DBus `org.kde.keyboard`），而不是配置里的第一个。
 
 ## 第四阶段：桌面集成（`crates/desktop`）
 

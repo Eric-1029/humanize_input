@@ -404,7 +404,7 @@ fn driver_failure_faults_the_session_and_lifts_keys() {
     s.start("Abc", classic(fast_settings())).unwrap();
     wait_for_state(&s, SessionState::Faulted);
     assert!(log.contains(&SessionEvent::Log(LogEvent::DriverFailed("uinput write failed".into()))));
-    assert_eq!(*events.lock().unwrap(), [(KeyCode::LEFT_SHIFT, true), (KeyCode::LEFT_SHIFT, false)]);
+    assert_eq!(*events.lock().unwrap(), [(KeyCode::RIGHT_SHIFT, true), (KeyCode::RIGHT_SHIFT, false)]);
 
     // A faulted session does not block the next one.
     s.start("abc", classic(fast_settings())).unwrap();

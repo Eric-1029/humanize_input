@@ -16,7 +16,7 @@ use rand::RngExt;
 
 use super::model::HumanModel;
 use super::words::is_common_bigram;
-use crate::keys::{Finger, Hand, KeyAction, KeyCode, Mods, Stroke};
+use crate::keys::{Finger, KeyAction, KeyCode, Mods, Stroke};
 use crate::layout::{KeyInfo, Layout};
 use crate::progress::TypingProgress;
 
@@ -186,21 +186,6 @@ impl Motor {
         }
     }
 
-    /// Which physical key provides `flag` when typing `key`.
-    fn modifier_key(&self, flag: Mods, key: KeyCode) -> KeyCode {
-        if flag == Mods::SHIFT {
-            // Touch typists use the Shift on the other hand.
-            match self.layout.key_info(key).and_then(|i| i.finger.hand()) {
-                Some(Hand::Left) => KeyCode::RIGHT_SHIFT,
-                _ => KeyCode::LEFT_SHIFT,
-            }
-        } else if flag == Mods::CTRL {
-            KeyCode::LEFT_CTRL
-        } else {
-            KeyCode::RIGHT_ALT
-        }
-    }
-
     /// Schedules one keystroke.
     pub(crate) fn press<R: rand::Rng + ?Sized>(&mut self, stroke: Stroke, ctx: PressCtx, rng: &mut R) {
         let c = self.layout.char_for(stroke.key, stroke.mods);
@@ -231,7 +216,11 @@ impl Motor {
             if self.held.iter().any(|h| h.flag == flag) {
                 continue;
             }
-            let key = self.modifier_key(flag, stroke.key);
+            let Some(key) = self.layout.modifier_key_for(flag, stroke.key) else {
+                // The layout has no key for this modifier; strokes needing
+                // it are never generated, so just skip.
+                continue;
+            };
             let lead = us(lognormal(rng, self.model.modifier_lead_ms, 0.3).clamp(15.0, 250.0));
             // After the previous press (so it keeps its case) and after this
             // modifier's own last release.

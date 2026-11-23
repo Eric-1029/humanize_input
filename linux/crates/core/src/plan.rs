@@ -223,15 +223,8 @@ impl ClassicKeys {
     }
 
     fn stroke(&mut self, stroke: Stroke) {
-        let mod_keys: Vec<KeyCode> = stroke
-            .mods
-            .flags()
-            .map(|f| match f {
-                Mods::SHIFT => KeyCode::LEFT_SHIFT,
-                Mods::CTRL => KeyCode::LEFT_CTRL,
-                _ => KeyCode::RIGHT_ALT,
-            })
-            .collect();
+        let mod_keys: Vec<KeyCode> =
+            stroke.mods.flags().filter_map(|f| self.layout.modifier_key_for(f, stroke.key)).collect();
         self.pending.extend(mod_keys.iter().map(|&k| KeyAction::Press(k)));
         self.pending.extend([KeyAction::Press(stroke.key), KeyAction::Release(stroke.key)]);
         self.pending.extend(mod_keys.iter().rev().map(|&k| KeyAction::Release(k)));

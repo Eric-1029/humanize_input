@@ -196,9 +196,12 @@ impl HumanPlanner {
             self.press(wrong.unwrap_or(stroke), false);
         }
         self.think(self.model.notice_delay_ms);
+        let has_ctrl = self.layout.modifier_keys().ctrl.is_some();
         match self.model.word_delete {
-            WordDelete::CtrlBackspace => self.press(Stroke::new(KeyCode::BACKSPACE, Mods::CTRL), true),
-            WordDelete::Backspaces => self.backspaces(typed),
+            WordDelete::CtrlBackspace if has_ctrl => {
+                self.press(Stroke::new(KeyCode::BACKSPACE, Mods::CTRL), true);
+            }
+            _ => self.backspaces(typed),
         }
         self.think(REDO_RESTART_MS);
         self.progress.word_redo_count += 1;

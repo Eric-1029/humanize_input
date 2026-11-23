@@ -38,6 +38,7 @@ impl KeyCode {
     pub const COMMA: Self = Self(51);
     pub const DOT: Self = Self(52);
     pub const SLASH: Self = Self(53);
+    pub const KEY_102ND: Self = Self(86);
     pub const RIGHT_SHIFT: Self = Self(54);
     pub const LEFT_ALT: Self = Self(56);
     pub const SPACE: Self = Self(57);

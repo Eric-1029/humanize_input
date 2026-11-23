@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use rand::RngExt;
 
 use crate::geometry::KeyboardGeometry;
-use crate::keys::{Finger, KeyCode, Mods, Stroke};
+use crate::keys::Finger::{self, *};
+use crate::keys::{KeyCode, Mods, Stroke};
 use crate::text::{UnsupportedChar, is_supported_char, normalize_newlines};
 
 /// One US key: (base char, shifted char, evdev code, finger).
@@ -27,6 +28,132 @@ pub struct KeyInfo {
     pub finger: Finger,
 }
 
+/// Touch-typing finger for each key position, with the US characters as a
+/// reference: (base char, shifted char, evdev code, finger), per row with
+/// the row's horizontal offset in key widths.
+#[rustfmt::skip]
+const US_ROWS: [(f64, &[UsKey]); 4] = [
+        (
+            0.0,
+            &[
+                ('`', '~', 41, LeftPinky),
+                ('1', '!', 2, LeftPinky),
+                ('2', '@', 3, LeftRing),
+                ('3', '#', 4, LeftMiddle),
+                ('4', '$', 5, LeftIndex),
+                ('5', '%', 6, LeftIndex),
+                ('6', '^', 7, RightIndex),
+                ('7', '&', 8, RightIndex),
+                ('8', '*', 9, RightMiddle),
+                ('9', '(', 10, RightRing),
+                ('0', ')', 11, RightPinky),
+                ('-', '_', 12, RightPinky),
+                ('=', '+', 13, RightPinky),
+            ],
+        ),
+        (
+            1.5,
+            &[
+                ('q', 'Q', 16, LeftPinky),
+                ('w', 'W', 17, LeftRing),
+                ('e', 'E', 18, LeftMiddle),
+                ('r', 'R', 19, LeftIndex),
+                ('t', 'T', 20, LeftIndex),
+                ('y', 'Y', 21, RightIndex),
+                ('u', 'U', 22, RightIndex),
+                ('i', 'I', 23, RightMiddle),
+                ('o', 'O', 24, RightRing),
+                ('p', 'P', 25, RightPinky),
+                ('[', '{', 26, RightPinky),
+                (']', '}', 27, RightPinky),
+                ('\\', '|', 43, RightPinky),
+            ],
+        ),
+        (
+            1.75,
+            &[
+                ('a', 'A', 30, LeftPinky),
+                ('s', 'S', 31, LeftRing),
+                ('d', 'D', 32, LeftMiddle),
+                ('f', 'F', 33, LeftIndex),
+                ('g', 'G', 34, LeftIndex),
+                ('h', 'H', 35, RightIndex),
+                ('j', 'J', 36, RightIndex),
+                ('k', 'K', 37, RightMiddle),
+                ('l', 'L', 38, RightRing),
+                (';', ':', 39, RightPinky),
+                ('\'', '"', 40, RightPinky),
+            ],
+        ),
+        (
+            2.25,
+            &[
+                ('z', 'Z', 44, LeftPinky),
+                ('x', 'X', 45, LeftRing),
+                ('c', 'C', 46, LeftMiddle),
+                ('v', 'V', 47, LeftIndex),
+                ('b', 'B', 48, LeftIndex),
+                ('n', 'N', 49, RightIndex),
+                ('m', 'M', 50, RightIndex),
+                (',', '<', 51, RightMiddle),
+                ('.', '>', 52, RightRing),
+                ('/', '?', 53, RightPinky),
+            ],
+        ),
+    ];
+
+/// Physical position and finger of every key a typist uses, by evdev code.
+///
+/// Positions and fingers belong to the physical keyboard, not the layout:
+/// on AZERTY the key at evdev 16 still sits top-left and is hit by the left
+/// pinky. Covers ANSI plus the ISO key left of Z (`KEY_102ND`).
+pub fn standard_keys() -> Vec<(KeyCode, KeyInfo)> {
+    let mut keys = Vec::new();
+    for (y, (x0, row)) in US_ROWS.iter().enumerate() {
+        for (i, &(_, _, code, finger)) in row.iter().enumerate() {
+            keys.push((KeyCode(code), KeyInfo { x: x0 + i as f64, y: y as f64, finger }));
+        }
+    }
+    let special = [
+        (KeyCode::KEY_102ND, 1.25, 3.0, LeftPinky),
+        (KeyCode::SPACE, 6.5, 4.0, Thumb),
+        (KeyCode::TAB, 0.5, 1.0, LeftPinky),
+        (KeyCode::ENTER, 13.5, 2.0, RightPinky),
+        (KeyCode::BACKSPACE, 13.5, 0.0, RightPinky),
+        (KeyCode::LEFT_SHIFT, 0.5, 3.0, LeftPinky),
+        (KeyCode::RIGHT_SHIFT, 13.0, 3.0, RightPinky),
+        (KeyCode::LEFT_CTRL, 0.5, 4.0, LeftPinky),
+        (KeyCode::RIGHT_CTRL, 13.0, 4.0, RightPinky),
+        (KeyCode::RIGHT_ALT, 9.0, 4.0, Thumb),
+    ];
+    keys.extend(special.map(|(key, x, y, finger)| (key, KeyInfo { x, y, finger })));
+    keys
+}
+
+/// Which physical keys act as modifiers in this layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModifierKeys {
+    /// Shift used for keys typed by the right hand.
+    pub left_shift: KeyCode,
+    /// Shift used for keys typed by the left hand.
+    pub right_shift: KeyCode,
+    /// Ctrl, if any key provides it (needed for Ctrl+Backspace).
+    pub ctrl: Option<KeyCode>,
+    /// Level-3 shift (AltGr), if the layout has one.
+    pub altgr: Option<KeyCode>,
+}
+
+impl Default for ModifierKeys {
+    fn default() -> Self {
+        Self {
+            left_shift: KeyCode::LEFT_SHIFT,
+            right_shift: KeyCode::RIGHT_SHIFT,
+            ctrl: Some(KeyCode::LEFT_CTRL),
+            altgr: Some(KeyCode::RIGHT_ALT),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Layout {
     name: String,
@@ -35,6 +162,7 @@ pub struct Layout {
     keys: HashMap<KeyCode, KeyInfo>,
     /// Character keys near each character key, with pick weights.
     neighbours: HashMap<KeyCode, Vec<(KeyCode, f64)>>,
+    modifiers: ModifierKeys,
 }
 
 impl Layout {
@@ -77,113 +205,58 @@ impl Layout {
             })
             .collect();
 
-        Self { name: name.into(), strokes, chars: by_stroke, keys, neighbours }
+        Self {
+            name: name.into(),
+            strokes,
+            chars: by_stroke,
+            keys,
+            neighbours,
+            modifiers: ModifierKeys::default(),
+        }
     }
 
     /// US QWERTY on an ANSI keyboard, touch-typing finger assignment.
     pub fn us_qwerty() -> Self {
-        use Finger::*;
-        const S: Mods = Mods::SHIFT;
-        const N: Mods = Mods::NONE;
-
-        // (base, shifted, evdev code, finger) per row.
-        let rows: [(f64, &[UsKey]); 4] = [
-            (
-                0.0,
-                &[
-                    ('`', '~', 41, LeftPinky),
-                    ('1', '!', 2, LeftPinky),
-                    ('2', '@', 3, LeftRing),
-                    ('3', '#', 4, LeftMiddle),
-                    ('4', '$', 5, LeftIndex),
-                    ('5', '%', 6, LeftIndex),
-                    ('6', '^', 7, RightIndex),
-                    ('7', '&', 8, RightIndex),
-                    ('8', '*', 9, RightMiddle),
-                    ('9', '(', 10, RightRing),
-                    ('0', ')', 11, RightPinky),
-                    ('-', '_', 12, RightPinky),
-                    ('=', '+', 13, RightPinky),
-                ],
-            ),
-            (
-                1.5,
-                &[
-                    ('q', 'Q', 16, LeftPinky),
-                    ('w', 'W', 17, LeftRing),
-                    ('e', 'E', 18, LeftMiddle),
-                    ('r', 'R', 19, LeftIndex),
-                    ('t', 'T', 20, LeftIndex),
-                    ('y', 'Y', 21, RightIndex),
-                    ('u', 'U', 22, RightIndex),
-                    ('i', 'I', 23, RightMiddle),
-                    ('o', 'O', 24, RightRing),
-                    ('p', 'P', 25, RightPinky),
-                    ('[', '{', 26, RightPinky),
-                    (']', '}', 27, RightPinky),
-                    ('\\', '|', 43, RightPinky),
-                ],
-            ),
-            (
-                1.75,
-                &[
-                    ('a', 'A', 30, LeftPinky),
-                    ('s', 'S', 31, LeftRing),
-                    ('d', 'D', 32, LeftMiddle),
-                    ('f', 'F', 33, LeftIndex),
-                    ('g', 'G', 34, LeftIndex),
-                    ('h', 'H', 35, RightIndex),
-                    ('j', 'J', 36, RightIndex),
-                    ('k', 'K', 37, RightMiddle),
-                    ('l', 'L', 38, RightRing),
-                    (';', ':', 39, RightPinky),
-                    ('\'', '"', 40, RightPinky),
-                ],
-            ),
-            (
-                2.25,
-                &[
-                    ('z', 'Z', 44, LeftPinky),
-                    ('x', 'X', 45, LeftRing),
-                    ('c', 'C', 46, LeftMiddle),
-                    ('v', 'V', 47, LeftIndex),
-                    ('b', 'B', 48, LeftIndex),
-                    ('n', 'N', 49, RightIndex),
-                    ('m', 'M', 50, RightIndex),
-                    (',', '<', 51, RightMiddle),
-                    ('.', '>', 52, RightRing),
-                    ('/', '?', 53, RightPinky),
-                ],
-            ),
-        ];
-
         let mut chars = Vec::new();
-        let mut keys = Vec::new();
-        for (y, (x0, row)) in rows.iter().enumerate() {
-            for (i, &(base, shifted, code, finger)) in row.iter().enumerate() {
-                let key = KeyCode(code);
-                chars.push((base, Stroke::new(key, N)));
-                chars.push((shifted, Stroke::new(key, S)));
-                keys.push((key, KeyInfo { x: x0 + i as f64, y: y as f64, finger }));
+        for (_, row) in US_ROWS {
+            for &(base, shifted, code, _) in row {
+                chars.push((base, Stroke::new(KeyCode(code), Mods::NONE)));
+                chars.push((shifted, Stroke::new(KeyCode(code), Mods::SHIFT)));
             }
         }
-        chars.push((' ', Stroke::new(KeyCode::SPACE, N)));
-        chars.push(('\n', Stroke::new(KeyCode::ENTER, N)));
-        chars.push(('\t', Stroke::new(KeyCode::TAB, N)));
+        chars.push((' ', Stroke::new(KeyCode::SPACE, Mods::NONE)));
+        chars.push(('\n', Stroke::new(KeyCode::ENTER, Mods::NONE)));
+        chars.push(('\t', Stroke::new(KeyCode::TAB, Mods::NONE)));
+        Self::new("us", chars, standard_keys())
+    }
 
-        let special = [
-            (KeyCode::SPACE, 6.5, 4.0, Thumb),
-            (KeyCode::TAB, 0.5, 1.0, LeftPinky),
-            (KeyCode::ENTER, 13.5, 2.0, RightPinky),
-            (KeyCode::BACKSPACE, 13.5, 0.0, RightPinky),
-            (KeyCode::LEFT_SHIFT, 0.5, 3.0, LeftPinky),
-            (KeyCode::RIGHT_SHIFT, 13.0, 3.0, RightPinky),
-            (KeyCode::LEFT_CTRL, 0.5, 4.0, LeftPinky),
-            (KeyCode::RIGHT_ALT, 9.0, 4.0, Thumb),
-        ];
-        keys.extend(special.map(|(key, x, y, finger)| (key, KeyInfo { x, y, finger })));
+    /// Replaces the default modifier keys (left/right Shift, left Ctrl,
+    /// right Alt as AltGr).
+    pub fn with_modifier_keys(mut self, modifiers: ModifierKeys) -> Self {
+        self.modifiers = modifiers;
+        self
+    }
 
-        Self::new("us", chars, keys)
+    pub fn modifier_keys(&self) -> ModifierKeys {
+        self.modifiers
+    }
+
+    /// The physical key that provides `flag` when typing `key`. Shift comes
+    /// from the other hand, as touch typists do.
+    pub fn modifier_key_for(&self, flag: Mods, key: KeyCode) -> Option<KeyCode> {
+        let m = self.modifiers;
+        if flag == Mods::SHIFT {
+            match self.key_info(key).and_then(|i| i.finger.hand()) {
+                Some(crate::keys::Hand::Left) => Some(m.right_shift),
+                _ => Some(m.left_shift),
+            }
+        } else if flag == Mods::CTRL {
+            m.ctrl
+        } else if flag == Mods::ALTGR {
+            m.altgr
+        } else {
+            None
+        }
     }
 
     pub fn name(&self) -> &str {
