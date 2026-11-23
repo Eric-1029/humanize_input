@@ -52,6 +52,40 @@ pub struct BoundHotkey {
     pub trigger: String,
 }
 
+/// Portals identify non-sandboxed apps by a desktop file named after the app
+/// id; without one, KDE refuses with "An app id is required". Packages ship
+/// the file in /usr/share/applications; when running from a build tree, write
+/// a hidden one to ~/.local/share/applications. Returns the file written.
+pub fn ensure_desktop_entry() -> std::io::Result<Option<std::path::PathBuf>> {
+    use std::path::{Path, PathBuf};
+    let file = format!("{APP_ID}.desktop");
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home.as_ref().map(|h| h.join(".local/share")));
+    let data_dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    let exists = data_home
+        .iter()
+        .cloned()
+        .chain(data_dirs.split(':').filter(|d| !d.is_empty()).map(PathBuf::from))
+        .any(|dir| dir.join("applications").join(&file).exists());
+    if exists {
+        return Ok(None);
+    }
+    let Some(dir) = data_home.map(|d| d.join("applications")) else { return Ok(None) };
+    let exe = std::env::current_exe()?;
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(file);
+    let entry = format!(
+        "[Desktop Entry]\nType=Application\nName=humanize_input\nComment=Types text like a person through a virtual keyboard\n\
+         Exec={}\nIcon=input-keyboard\nTerminal=false\nNoDisplay=true\n\
+         X-Comment=Written by a development build so desktop portals recognise the app.\n",
+        Path::new(&exe).display()
+    );
+    std::fs::write(&path, entry)?;
+    Ok(Some(path))
+}
+
 pub(crate) struct Shortcuts {
     portal: GlobalShortcuts,
     session: Session<GlobalShortcuts>,

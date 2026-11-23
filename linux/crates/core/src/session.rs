@@ -422,8 +422,8 @@ impl Executor<'_> {
 pub struct Session {
     shared: Arc<Shared>,
     driver: Arc<Mutex<Box<dyn Driver>>>,
-    layout: Arc<Layout>,
-    classic_geometry: Arc<KeyboardGeometry>,
+    /// Layout and the classic model's neighbour table derived from it.
+    layout: Mutex<(Arc<Layout>, Arc<KeyboardGeometry>)>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -445,8 +445,7 @@ impl Session {
                 hooks: None,
             }),
             driver: Arc::new(Mutex::new(driver)),
-            classic_geometry: Arc::new(layout.classic_geometry()),
-            layout,
+            layout: Mutex::new((Arc::clone(&layout), Arc::new(layout.classic_geometry()))),
             worker: Mutex::new(None),
         }
     }
@@ -461,8 +460,24 @@ impl Session {
         self.shared.lock().state
     }
 
-    pub fn layout(&self) -> &Arc<Layout> {
-        &self.layout
+    /// The layout characters are mapped with.
+    pub fn layout(&self) -> Arc<Layout> {
+        Arc::clone(&self.layout_lock().0)
+    }
+
+    /// Switches to another keyboard layout (e.g. after the user changed it
+    /// in KDE). Refused while a session is active.
+    pub fn set_layout(&self, layout: Arc<Layout>) -> Result<(), StartError> {
+        if self.shared.lock().worker_active {
+            return Err(StartError::Busy);
+        }
+        let geometry = Arc::new(layout.classic_geometry());
+        *self.layout_lock() = (layout, geometry);
+        Ok(())
+    }
+
+    fn layout_lock(&self) -> MutexGuard<'_, (Arc<Layout>, Arc<KeyboardGeometry>)> {
+        self.layout.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Validates `text` and starts typing it with a fresh random seed.
@@ -476,8 +491,7 @@ impl Session {
     }
 
     fn plan_factory(&self, text: &str, mode: TypingMode, seed: Option<u64>) -> PlanFactory {
-        let layout = Arc::clone(&self.layout);
-        let geometry = Arc::clone(&self.classic_geometry);
+        let (layout, geometry) = self.layout_lock().clone();
         let text = text.to_owned();
         Box::new(move |app_id: Option<&str>| -> ActionStream {
             match mode {
@@ -503,7 +517,7 @@ impl Session {
         if text.trim().is_empty() {
             return Err(StartError::EmptyText);
         }
-        let unsupported = self.layout.find_unsupported(text).len();
+        let unsupported = self.layout().find_unsupported(text).len();
         if unsupported > 0 {
             return Err(StartError::UnsupportedChars(unsupported));
         }

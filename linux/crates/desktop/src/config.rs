@@ -17,6 +17,16 @@ pub enum Language {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
+pub enum Theme {
+    /// Follow the desktop's light/dark preference.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
 pub enum ModelKind {
     #[default]
     Human,
@@ -66,6 +76,7 @@ impl Default for Device {
 #[serde(default)]
 pub struct Config {
     pub language: Language,
+    pub theme: Theme,
     pub model: ModelKind,
     pub preset: Preset,
     pub macros: Macros,
@@ -86,6 +97,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             language: Language::default(),
+            theme: Theme::default(),
             model: ModelKind::default(),
             preset: Preset::Average,
             macros: Macros::default(),
