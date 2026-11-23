@@ -14,6 +14,8 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::delay::next_delay_ms;
 use crate::geometry::KeyboardGeometry;
+use crate::keys::{KeyAction, KeyCode, Mods, Stroke};
+use crate::layout::Layout;
 use crate::progress::TypingProgress;
 use crate::settings::TypingSettings;
 use crate::text::normalize_newlines;
@@ -206,6 +208,58 @@ impl Iterator for Planner {
     }
 }
 
+/// Converts classic character actions into instant key presses, like the
+/// original `SendInput` driver: modifiers down, key down, key up, modifiers
+/// up, with no time in between.
+pub struct ClassicKeys {
+    planner: Planner,
+    layout: Arc<Layout>,
+    pending: VecDeque<KeyAction>,
+}
+
+impl ClassicKeys {
+    pub fn new(planner: Planner, layout: Arc<Layout>) -> Self {
+        Self { planner, layout, pending: VecDeque::new() }
+    }
+
+    fn stroke(&mut self, stroke: Stroke) {
+        let mod_keys: Vec<KeyCode> = stroke
+            .mods
+            .flags()
+            .map(|f| match f {
+                Mods::SHIFT => KeyCode::LEFT_SHIFT,
+                Mods::CTRL => KeyCode::LEFT_CTRL,
+                _ => KeyCode::RIGHT_ALT,
+            })
+            .collect();
+        self.pending.extend(mod_keys.iter().map(|&k| KeyAction::Press(k)));
+        self.pending.extend([KeyAction::Press(stroke.key), KeyAction::Release(stroke.key)]);
+        self.pending.extend(mod_keys.iter().rev().map(|&k| KeyAction::Release(k)));
+    }
+}
+
+impl Iterator for ClassicKeys {
+    type Item = KeyAction;
+
+    fn next(&mut self) -> Option<KeyAction> {
+        while self.pending.is_empty() {
+            match self.planner.next()? {
+                // Characters the layout lacks were rejected before starting;
+                // fallback typo letters exist on every Latin layout.
+                Action::Type(c) => {
+                    if let Some(stroke) = self.layout.stroke(c) {
+                        self.stroke(stroke);
+                    }
+                }
+                Action::Backspace => self.stroke(Stroke::new(KeyCode::BACKSPACE, Mods::NONE)),
+                Action::Wait(d) => self.pending.push_back(KeyAction::Wait(d)),
+                Action::Progress(p) => self.pending.push_back(KeyAction::Progress(p)),
+            }
+        }
+        self.pending.pop_front()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +374,19 @@ mod tests {
     #[test]
     fn empty_text_yields_nothing() {
         assert_eq!(Planner::with_seed("", TypingSettings::default(), geometry(), 0).count(), 0);
+    }
+
+    #[test]
+    fn classic_keys_type_the_same_text_instantly() {
+        use crate::editor::VirtualEditor;
+        let layout = Arc::new(Layout::us_qwerty());
+        let planner = Planner::with_seed(SAMPLE, settings(20, 10, 10, 100), geometry(), 11);
+        let actions: Vec<KeyAction> = ClassicKeys::new(planner, Arc::clone(&layout)).collect();
+        let mut editor = VirtualEditor::new(layout);
+        editor.apply_all(actions.iter().copied());
+        assert_eq!(editor.text(), SAMPLE);
+        assert!(editor.violations().is_empty(), "{:?}", editor.violations());
+        assert!(editor.held().is_empty());
+        assert_eq!(editor.rollovers(), 0);
     }
 }

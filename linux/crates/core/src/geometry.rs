@@ -39,14 +39,25 @@ impl KeyboardGeometry {
         rows: impl IntoIterator<Item = (&'a str, f64)>,
         shifted_to_base: impl IntoIterator<Item = (char, char)>,
     ) -> Self {
-        let mut positions: Vec<(char, f64, f64)> = Vec::new();
-        for (row_index, (row, offset)) in rows.into_iter().enumerate() {
-            for (col, key) in row.chars().enumerate() {
-                if !positions.iter().any(|&(k, _, _)| k == key) {
-                    positions.push((key, col as f64 + offset, row_index as f64));
-                }
+        let positions = rows.into_iter().enumerate().flat_map(|(row_index, (row, offset))| {
+            row.chars().enumerate().map(move |(col, key)| (key, col as f64 + offset, row_index as f64))
+        });
+        Self::from_positions(positions, shifted_to_base)
+    }
+
+    /// Builds a geometry from `(base char, x, y)` positions in key widths and
+    /// shifted → base pairs. Later duplicates of a character are ignored.
+    pub fn from_positions(
+        positions: impl IntoIterator<Item = (char, f64, f64)>,
+        shifted_to_base: impl IntoIterator<Item = (char, char)>,
+    ) -> Self {
+        let mut unique: Vec<(char, f64, f64)> = Vec::new();
+        for p in positions {
+            if !unique.iter().any(|&(k, _, _)| k == p.0) {
+                unique.push(p);
             }
         }
+        let positions = unique;
 
         let neighbours = positions
             .iter()

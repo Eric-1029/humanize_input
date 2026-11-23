@@ -10,6 +10,12 @@ pub struct TypingProgress {
     pub typo_count: usize,
     pub omission_count: usize,
     pub transpose_count: usize,
+    /// Key pressed twice (human model only).
+    pub double_press_count: usize,
+    /// Shift timing slips: wrong letter case (human model only).
+    pub case_slip_count: usize,
+    /// Words fumbled, erased and retyped (human model only).
+    pub word_redo_count: usize,
     /// Mistakes that were noticed and fixed.
     pub correction_count: usize,
 }
